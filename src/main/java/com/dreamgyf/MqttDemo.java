@@ -10,7 +10,7 @@ public class MqttDemo {
     public static void main(String[] args) throws Exception{
 
         MqttClient mqttClient = new MqttClientBuilder(MqttVersion.V_3_1_1).setCleanSession(true)
-                .setClientId("test1").setKeepAliveTime((short) 120).build("mq.tongxinmao.com",18831);
+                .setClientId("dream").setKeepAliveTime((short) 120).build("mq.tongxinmao.com",18831);
         mqttClient.connect(new MqttConnectCallback() {
             @Override
             public void onSuccess() {

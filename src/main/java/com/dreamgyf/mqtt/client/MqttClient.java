@@ -76,8 +76,10 @@ public class MqttClient {
                         if(mqttMessage instanceof MqttConnackMessage) {
                             if(((MqttConnackMessage) mqttMessage).getReturnCode() == 0)
                                 callback.onSuccess();
-                            else
+                            else {
+                                isConnected = false;
                                 callback.onFailure();
+                            }
                             iterator.remove();
                         }
                     }

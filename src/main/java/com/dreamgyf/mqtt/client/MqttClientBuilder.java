@@ -52,27 +52,27 @@ public class MqttClientBuilder {
     /**
      * 客户端标识符 Client Identifier
      */
-    private String clientId;
+    private String clientId = "default";
 
     /**
      * 遗嘱主题 Will Topic
      */
-    private String willTopic;
+    private String willTopic = "";
 
     /**
      * 遗嘱消息 Will Message
      */
-    private String willMessage;
+    private String willMessage = "";
 
     /**
      * 用户名 User Name
      */
-    private String username;
+    private String username = "";
 
     /**
      * 密码 Password
      */
-    private String password;
+    private String password = "";
 
     public MqttClientBuilder(MqttVersion version) {
         this.version = version;

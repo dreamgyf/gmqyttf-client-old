@@ -66,6 +66,7 @@ public class MqttReceiver implements Runnable {
                     fixedHeader[1] = temp[0];
                     int size = fixedHeader[1];
                     byte[] residue = new byte[size];
+                    in.read(residue);
                     byte[] data = MqttBuildUtils.combineBytes(fixedHeader,residue);
                     mqttMessage.setMessage(data);
                     messageList.add(mqttMessage);
