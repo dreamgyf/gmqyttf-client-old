@@ -1,12 +1,13 @@
-package com.dreamgyf.mqtt;
+package com.dreamgyf.mqtt.client;
 
 import com.dreamgyf.exception.MqttBuildException;
+import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.utils.ByteUtils;
 import com.dreamgyf.utils.MqttBuildUtils;
 
 import java.util.regex.Pattern;
 
-public class MqttConnectBuilder {
+public class MqttClientBuilder {
 
     /**
      * 协议版本
@@ -73,7 +74,7 @@ public class MqttConnectBuilder {
      */
     private String password;
 
-    public MqttConnectBuilder(MqttVersion version) {
+    public MqttClientBuilder(MqttVersion version) {
         this.version = version;
         //构建固定报头 Fixed header
         fixedHeader = new byte[2];
@@ -93,13 +94,13 @@ public class MqttConnectBuilder {
         return version;
     }
 
-    public MqttConnectBuilder setVersion(MqttVersion version) {
+    public MqttClientBuilder setVersion(MqttVersion version) {
         protocolName = version.getProtocolName();
         protocolLevel = version.getProtocolLevel();
         return this;
     }
 
-    public MqttConnectBuilder setConnectFlags(byte connectFlags) {
+    public MqttClientBuilder setConnectFlags(byte connectFlags) {
         this.connectFlags = connectFlags;
         return this;
     }
@@ -108,7 +109,7 @@ public class MqttConnectBuilder {
         return (byte) (0b00000001 & (connectFlags >> 1));
     }
 
-    public MqttConnectBuilder setCleanSession(boolean bool) {
+    public MqttClientBuilder setCleanSession(boolean bool) {
         if(bool)
             connectFlags |= 0b00000010;
         else
@@ -120,7 +121,7 @@ public class MqttConnectBuilder {
         return (byte) (0b00000001 & (connectFlags >> 2));
     }
 
-    public MqttConnectBuilder setWillFlag(boolean bool) {
+    public MqttClientBuilder setWillFlag(boolean bool) {
         if(bool) {
             connectFlags |= 0b00000100;
         }
@@ -136,7 +137,7 @@ public class MqttConnectBuilder {
         return (byte) (0b00000011 & (connectFlags >> 3));
     }
 
-    public MqttConnectBuilder setWillQoS(byte value) {
+    public MqttClientBuilder setWillQoS(byte value) {
         setWillFlag(true);
         connectFlags &= ~0b00011000;
         connectFlags |= (value << 3);
@@ -147,7 +148,7 @@ public class MqttConnectBuilder {
         return (byte) (0b00000001 & (connectFlags >> 5));
     }
 
-    public MqttConnectBuilder setWillRetain(boolean bool) {
+    public MqttClientBuilder setWillRetain(boolean bool) {
         setWillFlag(true);
         if(bool) {
             connectFlags |= 0b00100000;
@@ -162,7 +163,7 @@ public class MqttConnectBuilder {
         return (byte) (0b00000001 & (connectFlags >> 7));
     }
 
-    public MqttConnectBuilder setUsernameFlag(boolean bool) {
+    public MqttClientBuilder setUsernameFlag(boolean bool) {
         if(bool) {
             connectFlags |= 0b10000000;
         }
@@ -176,7 +177,7 @@ public class MqttConnectBuilder {
         return (byte) (0b00000001 & (connectFlags >> 6));
     }
 
-    public MqttConnectBuilder setPasswordFlag(boolean bool) {
+    public MqttClientBuilder setPasswordFlag(boolean bool) {
         if(bool) {
             connectFlags |= 0b01000000;
         }
@@ -186,11 +187,11 @@ public class MqttConnectBuilder {
         return this;
     }
 
-    public short getKeepAliveTimeOut() {
+    public short getKeepAliveTime() {
         return ByteUtils.byte2ToShort(keepAlive);
     }
 
-    public MqttConnectBuilder setKeepAliveTimeOut(short timeOut) {
+    public MqttClientBuilder setKeepAliveTime(short timeOut) {
         keepAlive = ByteUtils.shortToByte2(timeOut);
         return this;
     }
@@ -199,7 +200,7 @@ public class MqttConnectBuilder {
         return clientId;
     }
 
-    public MqttConnectBuilder setClientId(String id) throws MqttBuildException {
+    public MqttClientBuilder setClientId(String id) throws MqttBuildException {
         if(!Pattern.matches("^[a-zA-Z0-9]+$",id))
             throw new MqttBuildException("illegal character,Client ID can only contain letters and Numbers");
         this.clientId = id;
@@ -210,7 +211,7 @@ public class MqttConnectBuilder {
         return willTopic;
     }
 
-    public MqttConnectBuilder setWillTopic(String willTopic) {
+    public MqttClientBuilder setWillTopic(String willTopic) {
         this.willTopic = willTopic;
         return this;
     }
@@ -219,7 +220,7 @@ public class MqttConnectBuilder {
         return willMessage;
     }
 
-    public MqttConnectBuilder setWillMessage(String willMessage) {
+    public MqttClientBuilder setWillMessage(String willMessage) {
         this.willMessage = willMessage;
         return this;
     }
@@ -228,7 +229,7 @@ public class MqttConnectBuilder {
         return username;
     }
 
-    public MqttConnectBuilder setUsername(String username) {
+    public MqttClientBuilder setUsername(String username) {
         this.username = username;
         return this;
     }
@@ -237,12 +238,12 @@ public class MqttConnectBuilder {
         return password;
     }
 
-    public MqttConnectBuilder setPassword(String password) {
+    public MqttClientBuilder setPassword(String password) {
         this.password = password;
         return this;
     }
 
-    public MqttConnect build(String broker, int port) {
+    public MqttClient build(String broker, int port) {
         //构建可变报头 Variable header
         variableHeader = new byte[protocolName.length + 4]; //Protocol Name + Protocol Level + Connect Flags + Keep Alive
         int pos = 0;
@@ -277,6 +278,6 @@ public class MqttConnectBuilder {
         byte[] message = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
         //设置报文长度
         message[1] = (byte) (message.length - 2);
-        return new MqttConnect(broker,port,message);
+        return new MqttClient(broker,port,message);
     }
 }
