@@ -1,6 +1,9 @@
 package com.dreamgyf.exception;
 
-public class MqttBuildException extends Exception {
+public class MqttBuildException extends MqttException {
+    
+    private static final long serialVersionUID = -1778367226140060536L;
+
     public MqttBuildException() {
         super();
     }

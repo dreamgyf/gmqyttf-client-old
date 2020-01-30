@@ -24,7 +24,7 @@ public enum MqttPacketType {
         this.type = type;
     }
 
-    public byte getType() {
+    public byte getCode() {
         return type;
     }
 }

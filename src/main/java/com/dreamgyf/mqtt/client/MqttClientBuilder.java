@@ -1,6 +1,6 @@
 package com.dreamgyf.mqtt.client;
 
-import com.dreamgyf.exception.MqttBuildException;
+import com.dreamgyf.exception.ValueRangeException;
 import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.utils.ByteUtils;
 import com.dreamgyf.utils.MqttBuildUtils;
@@ -200,9 +200,9 @@ public class MqttClientBuilder {
         return clientId;
     }
 
-    public MqttClientBuilder setClientId(String id) throws MqttBuildException {
+    public MqttClientBuilder setClientId(String id) throws ValueRangeException {
         if(!Pattern.matches("^[a-zA-Z0-9]+$",id))
-            throw new MqttBuildException("illegal character,Client ID can only contain letters and Numbers");
+            throw new ValueRangeException("illegal character,Client ID can only contain letters and Numbers");
         this.clientId = id;
         return this;
     }
