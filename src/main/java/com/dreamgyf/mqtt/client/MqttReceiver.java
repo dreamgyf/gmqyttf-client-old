@@ -13,12 +13,15 @@ public class MqttReceiver implements Runnable {
 
     private Socket socket;
 
+    private final Object socketLock;
+
     private List<MqttMessage> packetList;
 
     private final Object packetListLock;
 
-    public MqttReceiver(Socket socket, List<MqttMessage> packetList, final Object packetListLock) {
+    public MqttReceiver(Socket socket, Object socketLock, List<MqttMessage> packetList, final Object packetListLock) {
         this.socket = socket;
+        this.socketLock = socketLock;
         this.packetList = packetList;
         this.packetListLock = packetListLock;
     }
@@ -32,31 +35,31 @@ public class MqttReceiver implements Runnable {
                 byte[] temp = new byte[1];
                 if(in.read(temp) != -1){
                     MqttMessage mqttMessage;
-                    if((temp[0] >> 4) == MqttPacketType.CONNACK.getCode()) {
+                    if(((temp[0] & 0xff) >> 4) == MqttPacketType.CONNACK.getCode()) {
                         mqttMessage = new MqttConnackMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.PUBLISH.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBLISH.getCode()) {
                         mqttMessage = new MqttPublishMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.PUBACK.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBACK.getCode()) {
                         mqttMessage = new MqttPubackMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.PUBREC.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBREC.getCode()) {
                         mqttMessage = new MqttPubrecMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.PUBREL.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBREL.getCode()) {
                         mqttMessage = new MqttPubrelMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.PUBCOMP.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBCOMP.getCode()) {
                         mqttMessage = new MqttPubcompMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.SUBACK.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.SUBACK.getCode()) {
                         mqttMessage = new MqttSubackMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.UNSUBACK.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.UNSUBACK.getCode()) {
                         mqttMessage = new MqttUnsubackMessage();
                     }
-                    else if((temp[0] >> 4) == MqttPacketType.PINGRESP.getCode()) {
+                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PINGRESP.getCode()) {
                         mqttMessage = new MqttPingrespMessage();
                     }
                     else {

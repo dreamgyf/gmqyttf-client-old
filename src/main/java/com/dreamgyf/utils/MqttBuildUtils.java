@@ -10,7 +10,7 @@ public class MqttBuildUtils {
         return combineBytes(strBytesLength,strBytes);
     }
 
-    public static byte[] combineBytes(byte[] ...bytes){
+    public static byte[] combineBytes(byte[] ...bytes) {
         int pos = 0;
         int len = 0;
         for(byte[] byteArray : bytes){

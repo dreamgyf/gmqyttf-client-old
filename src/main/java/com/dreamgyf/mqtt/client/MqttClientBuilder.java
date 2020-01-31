@@ -275,9 +275,9 @@ public class MqttClientBuilder {
         //构建有效载荷 Payload
         payLoad = MqttBuildUtils.combineBytes(clientIdByte,willTopicByte,willMessageByte,usernameByte,passwordByte);
         //构建整个报文
-        byte[] message = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
+        byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
         //设置报文长度
-        message[1] = (byte) (message.length - 2);
-        return new MqttClient(broker,port,message);
+        packet[1] = (byte) (packet.length - 2);
+        return new MqttClient(broker,port,packet);
     }
 }
