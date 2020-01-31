@@ -29,22 +29,22 @@ public class MqttPublishOptions {
         return this;
     }
 
-    protected byte getQoS() {
+    public byte getQoS() {
         return this.QoS;
     }
 
-    protected MqttPublishOptions setQoS(int QoS) throws ValueRangeException {
+    public MqttPublishOptions setQoS(int QoS) throws ValueRangeException {
         if(QoS < 0 || QoS > 2)
             throw new ValueRangeException("The value of QoS must be between 0 and 3.");
         this.QoS = (byte) QoS;
         return this;
     }
 
-    protected boolean getRETAIN() {
+    public boolean getRETAIN() {
         return this.RETAIN;
     }
 
-    protected MqttPublishOptions setRETAIN(boolean RETAIN) {
+    public MqttPublishOptions setRETAIN(boolean RETAIN) {
         this.RETAIN = RETAIN;
         return this;
     }

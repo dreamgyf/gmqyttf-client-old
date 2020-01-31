@@ -7,18 +7,20 @@ import com.dreamgyf.utils.MqttBuildUtils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
 
 public class MqttReceiver implements Runnable {
 
     private Socket socket;
 
-    private List<MqttMessage> messageList;
+    private List<MqttMessage> packetList;
 
-    public MqttReceiver(Socket socket) {
+    private final Object packetListLock;
+
+    public MqttReceiver(Socket socket, List<MqttMessage> packetList, final Object packetListLock) {
         this.socket = socket;
-        messageList = new ArrayList<>();
+        this.packetList = packetList;
+        this.packetListLock = packetListLock;
     }
 
     @Override
@@ -70,15 +72,13 @@ public class MqttReceiver implements Runnable {
                     in.read(residue);
                     byte[] data = MqttBuildUtils.combineBytes(fixedHeader,residue);
                     mqttMessage.setMessage(data);
-                    messageList.add(mqttMessage);
+                    synchronized (packetListLock) {
+                        packetList.add(mqttMessage);
+                    }
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-    }
-
-    protected List<MqttMessage> getMessageList() {
-        return messageList;
     }
 }
