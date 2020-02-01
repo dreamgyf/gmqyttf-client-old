@@ -7,13 +7,10 @@ public class MqttTopic {
 
     private String topic;
 
-    private byte QoS;
+    private byte QoS = 0;
 
-    public MqttTopic(String topic, int QoS) throws ValueRangeException {
+    public MqttTopic(String topic) throws ValueRangeException {
         this.topic = topic;
-        if(QoS < 0 || QoS > 2)
-            throw new ValueRangeException("The value of QoS must be between 0 and 2.");
-        this.QoS = (byte) QoS;
     }
     
     public String getTopic() {
@@ -28,10 +25,11 @@ public class MqttTopic {
         return this.QoS;
     }
 
-    public void setQoS(int QoS) throws ValueRangeException {
+    public MqttTopic setQoS(int QoS) throws ValueRangeException {
         if(QoS < 0 || QoS > 2)
             throw new ValueRangeException("The value of QoS must be between 0 and 2.");
         this.QoS = (byte) QoS;
+        return this;
     }
 
     protected byte[] buildSubscribePayLoadPacket() {
@@ -42,6 +40,10 @@ public class MqttTopic {
         }
         res[res.length - 1] = QoS;
         return res;
+    }
+
+    protected byte[] buildUnsubscribePayLoadPacket() {
+        return MqttBuildUtils.utf8EncodedStrings(topic);
     }
 
 }

@@ -2,15 +2,19 @@ package com.dreamgyf.mqtt.client;
 
 import com.dreamgyf.exception.MqttException;
 import com.dreamgyf.mqtt.MqttPacketType;
+import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
+import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
 import com.dreamgyf.mqtt.client.callback.MqttConnectCallback;
 import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
 import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
-import com.dreamgyf.mqtt.message.MqttConnackMessage;
-import com.dreamgyf.mqtt.message.MqttMessage;
-import com.dreamgyf.mqtt.message.MqttPubackMessage;
-import com.dreamgyf.mqtt.message.MqttPubcompMessage;
-import com.dreamgyf.mqtt.message.MqttPubrecMessage;
-import com.dreamgyf.mqtt.message.MqttSubackMessage;
+import com.dreamgyf.mqtt.client.callback.MqttUnsubscribeCallback;
+import com.dreamgyf.mqtt.message.MqttConnackPacket;
+import com.dreamgyf.mqtt.message.MqttPacket;
+import com.dreamgyf.mqtt.message.MqttPubackPacket;
+import com.dreamgyf.mqtt.message.MqttPubcompPacket;
+import com.dreamgyf.mqtt.message.MqttPubrecPacket;
+import com.dreamgyf.mqtt.message.MqttSubackPacket;
+import com.dreamgyf.mqtt.message.MqttUnsubackPacket;
 import com.dreamgyf.utils.ByteUtils;
 import com.dreamgyf.utils.MqttBuildUtils;
 
@@ -52,13 +56,15 @@ public class MqttClient {
 
     private String broker;
 
+    private short keepAliveTime;
+
     private int port;
 
     private byte[] connectMessage;
 
     private Set<Short> packetIdSet = new HashSet<>();
 
-    private List<MqttMessage> packetList = new ArrayList<>();
+    private List<MqttPacket> packetList = new ArrayList<>();
 
     private Queue<MqttPublishPacketBuilder> publishQueue = new LinkedList<>();
 
@@ -66,12 +72,19 @@ public class MqttClient {
 
     private Set<Short> subscribePacketIdSet = new HashSet<>();
 
-    MqttReceiver receiver;
+    private MqttReceiver receiver;
 
-    protected MqttClient(String broker, int port, byte[] message) {
+    private MqttPing mqttPing;
+
+    private MqttMessageHandler messageHandler;
+
+    private MqttMessageCallback messageCallback;
+
+    protected MqttClient(String broker, int port, byte[] message, short keepAliveTime) {
         this.broker = broker;
         this.port = port;
         this.connectMessage = message;
+        this.keepAliveTime = keepAliveTime;
     }
 
     public void connect() throws IOException {
@@ -84,10 +97,25 @@ public class MqttClient {
         os.write(connectMessage);
         isConnected = socket.isConnected();
 
-        receiver = new MqttReceiver(socket,socketLock,packetList,packetListLock);
+        //创建报文接收器
+        receiver = new MqttReceiver(socket,packetList,packetListLock);
         executorService.execute(receiver);
+        
+        //创建心跳线程
+        mqttPing = new MqttPing(socket, socketLock, keepAliveTime, packetList, packetListLock, new MqttConnectStateCallback(){
+            @Override
+            public void onDisconnected() {
+                isConnected = false;
+            }
+        });
+        executorService.execute(mqttPing);
+
         ConnackListener connackListener = new ConnackListener(callback);
         executorService.execute(connackListener);
+
+        //创建消息处理器
+        messageHandler = new MqttMessageHandler(packetList, packetListLock, messageCallback);
+        executorService.execute(messageHandler);
     }
 
     public boolean isConnected() {
@@ -110,11 +138,11 @@ public class MqttClient {
             boolean isSucceed = false;
             while (!isConnacked){
                 synchronized (packetListLock) {
-                    Iterator<MqttMessage> iterator = packetList.iterator();
+                    Iterator<MqttPacket> iterator = packetList.iterator();
                     while(iterator.hasNext()){
-                        MqttMessage mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttConnackMessage) {
-                            isSucceed = ((MqttConnackMessage) mqttMessage).getReturnCode() == 0;
+                        MqttPacket mqttMessage = iterator.next();
+                        if(mqttMessage instanceof MqttConnackPacket) {
+                            isSucceed = ((MqttConnackPacket) mqttMessage).getReturnCode() == 0;
                             iterator.remove();
                             isConnacked = true;
                         }
@@ -169,9 +197,10 @@ public class MqttClient {
         //发送消息
         synchronized (socketLock) {
             if(!isConnected)
-            throw new MqttException("Disconnected");
+                throw new MqttException("Disconnected");
             OutputStream os = socket.getOutputStream();
             os.write(packet);
+            mqttPing.updateLastReqTime();
         }
         //放入发布队列
         if(options.getQoS() != 0) {
@@ -213,12 +242,12 @@ public class MqttClient {
             boolean isPubacked = false;
             while (!isPubacked){
                 synchronized (packetListLock) {
-                    Iterator<MqttMessage> iterator = packetList.iterator();
+                    Iterator<MqttPacket> iterator = packetList.iterator();
                     while(iterator.hasNext()){
-                        MqttMessage mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttPubackMessage) {
+                        MqttPacket mqttMessage = iterator.next();
+                        if(mqttMessage instanceof MqttPubackPacket) {
                             synchronized (publishQueueLock) {
-                                if(Arrays.equals(((MqttPubackMessage) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
+                                if(Arrays.equals(((MqttPubackPacket) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
                                     publishQueue.poll();
                                     synchronized (packetIdSetLock) {
                                         packetIdSet.remove(ByteUtils.byte2ToShort(id));
@@ -265,12 +294,12 @@ public class MqttClient {
             boolean isPubreced = false;
             while (!isPubreced){
                 synchronized (packetListLock) {
-                    Iterator<MqttMessage> iterator = packetList.iterator();
+                    Iterator<MqttPacket> iterator = packetList.iterator();
                     while(iterator.hasNext()){
-                        MqttMessage mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttPubrecMessage) {
+                        MqttPacket mqttMessage = iterator.next();
+                        if(mqttMessage instanceof MqttPubrecPacket) {
                             synchronized (publishQueueLock) {
-                                if(Arrays.equals(((MqttPubrecMessage) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
+                                if(Arrays.equals(((MqttPubrecPacket) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
                                     publishQueue.poll();
                                     iterator.remove();
                                     isPubreced = true;
@@ -331,12 +360,12 @@ public class MqttClient {
             boolean isPubcomped = false;
             while (!isPubcomped){
                 synchronized (packetListLock) {
-                    Iterator<MqttMessage> iterator = packetList.iterator();
+                    Iterator<MqttPacket> iterator = packetList.iterator();
                     while(iterator.hasNext()){
-                        MqttMessage mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttPubcompMessage) {
+                        MqttPacket mqttMessage = iterator.next();
+                        if(mqttMessage instanceof MqttPubcompPacket) {
                             synchronized (pubrelQueueLock) {
-                                if(Arrays.equals(((MqttPubcompMessage) mqttMessage).getPacketId(), id) && Arrays.equals(pubrelQueue.peek().getPacketId(), id)) {
+                                if(Arrays.equals(((MqttPubcompPacket) mqttMessage).getPacketId(), id) && Arrays.equals(pubrelQueue.peek().getPacketId(), id)) {
                                     pubrelQueue.poll();
                                     synchronized (packetIdSetLock) {
                                         packetIdSet.remove(ByteUtils.byte2ToShort(id));
@@ -406,6 +435,7 @@ public class MqttClient {
                 throw new MqttException("Disconnected");
             OutputStream os = socket.getOutputStream();
             os.write(packet);
+            mqttPing.updateLastReqTime();
         }
         //放入订阅队列
         synchronized (subscribePacketIdSetLock) {
@@ -438,11 +468,11 @@ public class MqttClient {
             boolean isSubacked = false;
             while (!isSubacked){
                 synchronized (packetListLock) {
-                    Iterator<MqttMessage> iterator = packetList.iterator();
+                    Iterator<MqttPacket> iterator = packetList.iterator();
                     while(iterator.hasNext()){
-                        MqttMessage mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttSubackMessage) {
-                            if(Arrays.equals(((MqttSubackMessage) mqttMessage).getPacketId(),id)) {
+                        MqttPacket mqttMessage = iterator.next();
+                        if(mqttMessage instanceof MqttSubackPacket) {
+                            if(Arrays.equals(((MqttSubackPacket) mqttMessage).getPacketId(),id)) {
                                 short shortId = ByteUtils.byte2ToShort(id);
                                 synchronized (subscribePacketIdSetLock) {
                                     subscribePacketIdSet.remove(shortId);
@@ -450,7 +480,7 @@ public class MqttClient {
                                 synchronized (packetIdSetLock) {
                                     packetIdSet.remove(shortId);
                                 }
-                                byte[] returnCodeList = ((MqttSubackMessage) mqttMessage).getReturnCodeList();
+                                byte[] returnCodeList = ((MqttSubackPacket) mqttMessage).getReturnCodeList();
                                 iterator.remove();
                                 isSubacked = true;
                                 if(callback != null) {
@@ -486,5 +516,133 @@ public class MqttClient {
                 }
             }
         }
+    }
+
+    public void unsubscribe(MqttTopic topic) throws MqttException, IOException {
+        unsubscribe(Arrays.asList(topic),null);
+    }
+
+    public void unsubscribe(MqttTopic topic, MqttUnsubscribeCallback callback) throws MqttException, IOException {
+        unsubscribe(Arrays.asList(topic),callback);
+    }
+
+    public void unsubscribe(MqttTopic[] topics) throws MqttException, IOException {
+        unsubscribe(Arrays.asList(topics),null);
+    }
+
+    public void unsubscribe(MqttTopic[] topics, MqttUnsubscribeCallback callback) throws MqttException, IOException {
+        unsubscribe(Arrays.asList(topics),callback);
+    }
+
+    public void unsubscribe(Collection<MqttTopic> topics) throws MqttException, IOException {
+        unsubscribe(topics,null);
+    }
+
+    public void unsubscribe(Collection<MqttTopic> topics, MqttUnsubscribeCallback callback) throws MqttException, IOException {
+        byte[] fixedHeader = new byte[2];
+        fixedHeader[0] = MqttPacketType.UNSUBSCRIBE.getCode();
+        fixedHeader[0] <<= 4;
+        fixedHeader[0] |= 0b00000010;
+        short id;
+        byte[] variableHeader;
+        synchronized (packetIdSetLock) {
+            do {
+                id = (short) (new Random(System.currentTimeMillis()).nextInt(Short.MAX_VALUE - 1) + 1);
+            } while(packetIdSet.contains(id));
+            variableHeader = ByteUtils.shortToByte2(id);
+            packetIdSet.add(id);
+        }
+        byte[] payLoad = new byte[0];
+        for(MqttTopic topic : topics) {
+            payLoad = MqttBuildUtils.combineBytes(payLoad, topic.buildUnsubscribePayLoadPacket());
+        }
+        byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
+        //设置报文长度
+        packet[1] = (byte) (packet.length - 2);
+        //发送取消订阅
+        synchronized (socketLock) {
+            if(!isConnected)
+                throw new MqttException("Disconnected");
+            OutputStream os = socket.getOutputStream();
+            os.write(packet);
+            mqttPing.updateLastReqTime();
+        }
+        
+        UnsubackListener unsubackListener = new UnsubackListener(variableHeader, topics, callback);
+        executorService.execute(unsubackListener);
+
+    }
+
+    private class UnsubackListener implements Runnable {
+
+        private byte[] id;
+
+        private Collection<MqttTopic> topics;
+
+        private MqttUnsubscribeCallback callback;
+
+        private UnsubackListener(byte[] id, Collection<MqttTopic> topics, MqttUnsubscribeCallback callback) {
+            super();
+            this.id = id;
+            this.topics = topics;
+            this.callback = callback;
+        }
+
+        @Override
+        public void run() {
+            Thread.currentThread().setName("Thread-UnsubackListener");
+            boolean isUnsubacked = false;
+            while (!isUnsubacked){
+                synchronized (packetListLock) {
+                    Iterator<MqttPacket> iterator = packetList.iterator();
+                    while(iterator.hasNext()){
+                        MqttPacket mqttMessage = iterator.next();
+                        if(mqttMessage instanceof MqttUnsubackPacket) {
+                            if(Arrays.equals(((MqttUnsubackPacket) mqttMessage).getPacketId(),id)) {
+                                short shortId = ByteUtils.byte2ToShort(id);
+                                synchronized (packetIdSetLock) {
+                                    packetIdSet.remove(shortId);
+                                }
+                                iterator.remove();
+                                isUnsubacked = true;
+                            }
+                        }
+                    }
+                }
+
+                if(isUnsubacked && callback != null) {
+                    callback.onSuccess(topics);
+                }
+                
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    public void disconnect() throws MqttException, IOException {
+        byte[] packet = new byte[2];
+        packet[0] = MqttPacketType.DISCONNECT.getCode();
+        packet[0] <<= 4;
+        receiver.stop();
+        mqttPing.stop();
+        mqttPing = null;
+        messageHandler.stop();
+        messageHandler = null;
+        isConnected = false;
+        synchronized (socketLock) {
+            if(socket.isConnected()) {
+                OutputStream os = socket.getOutputStream();
+                os.write(packet);
+                socket.close();
+            }
+        }
+    }
+
+    public void setCallback(MqttMessageCallback callback) {
+        this.messageCallback = callback;
     }
 }

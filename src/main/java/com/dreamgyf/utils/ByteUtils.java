@@ -50,4 +50,12 @@ public class ByteUtils {
         int b3 = bytes[3] & 0xFF;
         return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
     }
+
+    public static byte[] getSection(byte bytes[], int offset, int length) {
+        byte[] res = new byte[length];
+        for(int i = 0;i < length;i++) {
+            res[i] = bytes[i + offset];
+        }
+        return res;
+    }
 }

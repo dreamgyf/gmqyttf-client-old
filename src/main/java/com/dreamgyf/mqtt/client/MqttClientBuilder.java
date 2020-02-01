@@ -42,7 +42,7 @@ public class MqttClientBuilder {
     /**
      * 保持连接 Keep Alive
      */
-    private byte[] keepAlive;
+    private short keepAlive;
 
     /**
      * 有效载荷 Payload
@@ -85,9 +85,7 @@ public class MqttClientBuilder {
         //构建连接标志 Connect Flags
         connectFlags = 0;
         //构建保持连接 Keep Alive
-        keepAlive = new byte[2];
-        keepAlive[0] = 0;
-        keepAlive[1] = 0;
+        keepAlive = 10;
     }
 
     public MqttVersion getVersion() {
@@ -188,11 +186,11 @@ public class MqttClientBuilder {
     }
 
     public short getKeepAliveTime() {
-        return ByteUtils.byte2ToShort(keepAlive);
+        return keepAlive;
     }
 
     public MqttClientBuilder setKeepAliveTime(short timeOut) {
-        keepAlive = ByteUtils.shortToByte2(timeOut);
+        keepAlive = timeOut;
         return this;
     }
 
@@ -253,8 +251,9 @@ public class MqttClientBuilder {
         }
         variableHeader[pos++] = protocolLevel;
         variableHeader[pos++] = connectFlags;
-        variableHeader[pos++] = keepAlive[0];
-        variableHeader[pos] = keepAlive[1];
+        byte[] timeOut = ByteUtils.shortToByte2(keepAlive);
+        variableHeader[pos++] = timeOut[0];
+        variableHeader[pos] = timeOut[1];
         //构建客户端标识符 Client Identifier
         byte[] clientIdByte = MqttBuildUtils.utf8EncodedStrings(clientId);
         //构建遗嘱主题 Will Topic 遗嘱消息 Will Message
@@ -278,6 +277,6 @@ public class MqttClientBuilder {
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
         //设置报文长度
         packet[1] = (byte) (packet.length - 2);
-        return new MqttClient(broker,port,packet);
+        return new MqttClient(broker,port,packet,keepAlive);
     }
 }

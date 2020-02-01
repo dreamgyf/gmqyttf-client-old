@@ -13,15 +13,14 @@ public class MqttReceiver implements Runnable {
 
     private Socket socket;
 
-    private final Object socketLock;
-
-    private List<MqttMessage> packetList;
+    private List<MqttPacket> packetList;
 
     private final Object packetListLock;
 
-    public MqttReceiver(Socket socket, Object socketLock, List<MqttMessage> packetList, final Object packetListLock) {
+    private boolean isRunning = true;
+
+    public MqttReceiver(Socket socket, List<MqttPacket> packetList, final Object packetListLock) {
         this.socket = socket;
-        this.socketLock = socketLock;
         this.packetList = packetList;
         this.packetListLock = packetListLock;
     }
@@ -29,38 +28,38 @@ public class MqttReceiver implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setName("Thread-MqttReceiver");
-        while(socket != null && socket.isConnected()) {
+        while(isRunning) {
             try {
                 InputStream in = socket.getInputStream();
                 byte[] temp = new byte[1];
                 if(in.read(temp) != -1){
-                    MqttMessage mqttMessage;
+                    MqttPacket mqttMessage;
                     if(((temp[0] & 0xff) >> 4) == MqttPacketType.CONNACK.getCode()) {
-                        mqttMessage = new MqttConnackMessage();
+                        mqttMessage = new MqttConnackPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBLISH.getCode()) {
-                        mqttMessage = new MqttPublishMessage();
+                        mqttMessage = new MqttPublishPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBACK.getCode()) {
-                        mqttMessage = new MqttPubackMessage();
+                        mqttMessage = new MqttPubackPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBREC.getCode()) {
-                        mqttMessage = new MqttPubrecMessage();
+                        mqttMessage = new MqttPubrecPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBREL.getCode()) {
-                        mqttMessage = new MqttPubrelMessage();
+                        mqttMessage = new MqttPubrelPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBCOMP.getCode()) {
-                        mqttMessage = new MqttPubcompMessage();
+                        mqttMessage = new MqttPubcompPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.SUBACK.getCode()) {
-                        mqttMessage = new MqttSubackMessage();
+                        mqttMessage = new MqttSubackPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.UNSUBACK.getCode()) {
-                        mqttMessage = new MqttUnsubackMessage();
+                        mqttMessage = new MqttUnsubackPacket();
                     }
                     else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PINGRESP.getCode()) {
-                        mqttMessage = new MqttPingrespMessage();
+                        mqttMessage = new MqttPingrespPacket();
                     }
                     else {
                         in.read();
@@ -70,11 +69,11 @@ public class MqttReceiver implements Runnable {
                     fixedHeader[0] = temp[0];
                     in.read(temp);
                     fixedHeader[1] = temp[0];
-                    int size = fixedHeader[1];
+                    int size = fixedHeader[1] & 0xff;
                     byte[] residue = new byte[size];
                     in.read(residue);
                     byte[] data = MqttBuildUtils.combineBytes(fixedHeader,residue);
-                    mqttMessage.setMessage(data);
+                    mqttMessage.setPacket(data);
                     synchronized (packetListLock) {
                         packetList.add(mqttMessage);
                     }
@@ -83,5 +82,9 @@ public class MqttReceiver implements Runnable {
                 e.printStackTrace();
             }
         }
+    }
+
+    protected void stop() {
+        isRunning = false;
     }
 }
