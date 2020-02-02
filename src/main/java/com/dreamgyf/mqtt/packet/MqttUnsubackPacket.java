@@ -1,4 +1,4 @@
-package com.dreamgyf.mqtt.message;
+package com.dreamgyf.mqtt.packet;
 
 import com.dreamgyf.utils.ByteUtils;
 

@@ -1,23 +1,5 @@
 package com.dreamgyf.mqtt.client;
 
-import com.dreamgyf.exception.MqttException;
-import com.dreamgyf.mqtt.MqttPacketType;
-import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
-import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
-import com.dreamgyf.mqtt.client.callback.MqttConnectCallback;
-import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
-import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
-import com.dreamgyf.mqtt.client.callback.MqttUnsubscribeCallback;
-import com.dreamgyf.mqtt.message.MqttConnackPacket;
-import com.dreamgyf.mqtt.message.MqttPacket;
-import com.dreamgyf.mqtt.message.MqttPubackPacket;
-import com.dreamgyf.mqtt.message.MqttPubcompPacket;
-import com.dreamgyf.mqtt.message.MqttPubrecPacket;
-import com.dreamgyf.mqtt.message.MqttSubackPacket;
-import com.dreamgyf.mqtt.message.MqttUnsubackPacket;
-import com.dreamgyf.utils.ByteUtils;
-import com.dreamgyf.utils.MqttBuildUtils;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -33,6 +15,24 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import com.dreamgyf.exception.MqttException;
+import com.dreamgyf.mqtt.MqttPacketType;
+import com.dreamgyf.mqtt.client.callback.MqttConnectCallback;
+import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
+import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
+import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
+import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
+import com.dreamgyf.mqtt.client.callback.MqttUnsubscribeCallback;
+import com.dreamgyf.mqtt.packet.MqttConnackPacket;
+import com.dreamgyf.mqtt.packet.MqttPacket;
+import com.dreamgyf.mqtt.packet.MqttPubackPacket;
+import com.dreamgyf.mqtt.packet.MqttPubcompPacket;
+import com.dreamgyf.mqtt.packet.MqttPubrecPacket;
+import com.dreamgyf.mqtt.packet.MqttSubackPacket;
+import com.dreamgyf.mqtt.packet.MqttUnsubackPacket;
+import com.dreamgyf.utils.ByteUtils;
+import com.dreamgyf.utils.MqttBuildUtils;
 
 public class MqttClient {
 
@@ -114,7 +114,7 @@ public class MqttClient {
         executorService.execute(connackListener);
 
         //创建消息处理器
-        messageHandler = new MqttMessageHandler(packetList, packetListLock, messageCallback);
+        messageHandler = new MqttMessageHandler(socket, socketLock, packetList, packetListLock, messageCallback);
         executorService.execute(messageHandler);
     }
 

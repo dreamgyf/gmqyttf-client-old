@@ -1,13 +1,13 @@
-package com.dreamgyf.mqtt.message;
+package com.dreamgyf.mqtt.packet;
 
 import com.dreamgyf.utils.ByteUtils;
 
-public class MqttPubcompPacket extends MqttPacket {
-    public MqttPubcompPacket() {
+public class MqttPubrelPacket extends MqttPacket {
+    public MqttPubrelPacket() {
         super();
     }
 
-    public MqttPubcompPacket(byte[] packet) {
+    public MqttPubrelPacket(byte[] packet) {
         super(packet);
     }
 

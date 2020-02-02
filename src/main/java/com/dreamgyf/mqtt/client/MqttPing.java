@@ -10,8 +10,8 @@ import java.util.concurrent.Executors;
 
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
-import com.dreamgyf.mqtt.message.MqttPacket;
-import com.dreamgyf.mqtt.message.MqttPingrespPacket;
+import com.dreamgyf.mqtt.packet.MqttPacket;
+import com.dreamgyf.mqtt.packet.MqttPingrespPacket;
 
 class MqttPing implements Runnable {
 
