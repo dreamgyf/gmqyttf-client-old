@@ -11,6 +11,6 @@ public class MqttConnackPacket extends MqttPacket {
     }
 
     public int getReturnCode(){
-        return packet[3];
+        return packet[getLength() - getRemainingLength() + 1];
     }
 }

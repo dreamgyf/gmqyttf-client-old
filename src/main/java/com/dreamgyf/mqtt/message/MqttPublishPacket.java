@@ -24,7 +24,7 @@ public class MqttPublishPacket extends MqttPacket {
     }
 
     public int getTopicLength() {
-        byte[] lengthByte = ByteUtils.getSection(packet, 2, 2);
+        byte[] lengthByte = ByteUtils.getSection(packet, getLength() - getRemainingLength(), 2);
         return ByteUtils.byte2ToShort(lengthByte);
     }
 
@@ -33,14 +33,14 @@ public class MqttPublishPacket extends MqttPacket {
     }
 
     public byte[] getPacketId() {
-        return getQoS() != 0 ? ByteUtils.getSection(packet, 2 + 2 + getTopicLength(), 2) : null;
+        return getQoS() != 0 ? ByteUtils.getSection(packet, getLength() - getRemainingLength() + 2 + getTopicLength(), 2) : null;
     }
 
     public int getMessageLength() {
-        return getQoS() != 0 ? (getLength() - 2 - 2 - getTopicLength() - 2) : (getLength() - 2 - 2 - getTopicLength());
+        return getQoS() != 0 ? (getRemainingLength() - 2 - getTopicLength() - 2) : (getRemainingLength() - 2 - getTopicLength());
     }
 
     public String getMessage() {
-        return new String(packet, getQoS() != 0 ? (2 + 2 + getTopicLength() + 2) : (2 + 2 + getTopicLength()),getMessageLength());
+        return new String(packet, getQoS() != 0 ? (getLength() - getRemainingLength() + 2 + getTopicLength() + 2) : (getLength() - getRemainingLength() + 2 + getTopicLength()),getMessageLength());
     }
 }

@@ -1,5 +1,7 @@
 package com.dreamgyf.mqtt.message;
 
+import com.dreamgyf.utils.MqttBuildUtils;
+
 public class MqttPacket {
 
     protected byte[] packet;
@@ -21,5 +23,9 @@ public class MqttPacket {
 
     public int getLength() {
         return packet.length;
+    }
+
+    public int getRemainingLength() {
+        return MqttBuildUtils.getRemainingLength(packet);
     }
 }

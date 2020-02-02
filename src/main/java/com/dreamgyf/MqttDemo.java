@@ -1,21 +1,16 @@
 package com.dreamgyf;
 
+import java.io.IOException;
+
+import com.dreamgyf.exception.MqttException;
+import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.mqtt.client.MqttClient;
 import com.dreamgyf.mqtt.client.MqttClientBuilder;
 import com.dreamgyf.mqtt.client.MqttPublishOptions;
 import com.dreamgyf.mqtt.client.MqttTopic;
-
-import java.io.IOException;
-import java.util.Collection;
-
-import com.dreamgyf.exception.MqttException;
-import com.dreamgyf.exception.ValueRangeException;
-import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.mqtt.client.callback.MqttConnectCallback;
 import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
-import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
 import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
-import com.dreamgyf.mqtt.client.callback.MqttUnsubscribeCallback;
 
 public class MqttDemo {
 
@@ -34,7 +29,7 @@ public class MqttDemo {
             public void onSuccess() {
                 System.out.println("连接成功");
                 try {
-                    mqttClient.subscribe(new MqttTopic("/public/TEST"),new MqttSubscribeCallback() {
+                    mqttClient.subscribe(new MqttTopic("/public/TEST/#"),new MqttSubscribeCallback() {
                     
                         @Override
                         public void onSuccess(String topic, int returnCode) {
@@ -47,8 +42,9 @@ public class MqttDemo {
                             
                         }
                     });
+                    
+                    mqttClient.publish("/public/TEST/1", "test",new MqttPublishOptions().setQoS(2));
                 } catch (MqttException | IOException e) {
-                    // TODO Auto-generated catch block
                     e.printStackTrace();
                 }
             }

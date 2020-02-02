@@ -31,14 +31,14 @@ class MqttPublishPacketBuilder {
     }
 
     protected byte[] build() {
-        byte[] fixedHeader = new byte[2];
-        fixedHeader[0] = MqttPacketType.PUBLISH.getCode();
-        fixedHeader[0] <<= 4;
+        byte[] header = new byte[1];
+        header[0] = MqttPacketType.PUBLISH.getCode();
+        header[0] <<= 4;
         if(options.getDUP())
-            fixedHeader[0] |= 0b00001000;
-        fixedHeader[0] |= options.getQoS() << 1;
+            header[0] |= 0b00001000;
+        header[0] |= options.getQoS() << 1;
         if(options.getRETAIN())
-            fixedHeader[0] |= 0b00000001;
+            header[0] |= 0b00000001;
         byte[] variableHeader;
         byte[] topicByte = MqttBuildUtils.utf8EncodedStrings(topic);
         //构建报文标识符 Packet Identifier
@@ -48,9 +48,11 @@ class MqttPublishPacketBuilder {
         }
         variableHeader = MqttBuildUtils.combineBytes(topicByte,packetIdentifier);
         byte[] payLoad = message.getBytes(StandardCharsets.UTF_8);
+        //构建固定报头 Fixed header
+        byte[] remainingLength = MqttBuildUtils.buildRemainingLength(variableHeader.length + payLoad.length);
+        byte[] fixedHeader = MqttBuildUtils.combineBytes(header,remainingLength);
+        //构建整个报文
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
-        //设置报文长度
-        packet[1] = (byte) (packet.length - 2);
         return packet;
     }
     

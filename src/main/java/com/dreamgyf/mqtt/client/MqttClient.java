@@ -409,10 +409,10 @@ public class MqttClient {
     }
 
     public void subscribe(Collection<MqttTopic> topics, MqttSubscribeCallback callback) throws MqttException, IOException {
-        byte[] fixedHeader = new byte[2];
-        fixedHeader[0] = MqttPacketType.SUBSCRIBE.getCode();
-        fixedHeader[0] <<= 4;
-        fixedHeader[0] |= 0b00000010;
+        byte[] header = new byte[1];
+        header[0] = MqttPacketType.SUBSCRIBE.getCode();
+        header[0] <<= 4;
+        header[0] |= 0b00000010;
         short id;
         byte[] variableHeader;
         synchronized (packetIdSetLock) {
@@ -426,9 +426,11 @@ public class MqttClient {
         for(MqttTopic topic : topics) {
             payLoad = MqttBuildUtils.combineBytes(payLoad, topic.buildSubscribePayLoadPacket());
         }
+        //构建固定报头 Fixed header
+        byte[] remainingLength = MqttBuildUtils.buildRemainingLength(variableHeader.length + payLoad.length);
+        byte[] fixedHeader = MqttBuildUtils.combineBytes(header,remainingLength);
+        //构建整个报文
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
-        //设置报文长度
-        packet[1] = (byte) (packet.length - 2);
         //发送订阅
         synchronized (socketLock) {
             if(!isConnected)
@@ -539,10 +541,10 @@ public class MqttClient {
     }
 
     public void unsubscribe(Collection<MqttTopic> topics, MqttUnsubscribeCallback callback) throws MqttException, IOException {
-        byte[] fixedHeader = new byte[2];
-        fixedHeader[0] = MqttPacketType.UNSUBSCRIBE.getCode();
-        fixedHeader[0] <<= 4;
-        fixedHeader[0] |= 0b00000010;
+        byte[] header = new byte[2];
+        header[0] = MqttPacketType.UNSUBSCRIBE.getCode();
+        header[0] <<= 4;
+        header[0] |= 0b00000010;
         short id;
         byte[] variableHeader;
         synchronized (packetIdSetLock) {
@@ -556,9 +558,11 @@ public class MqttClient {
         for(MqttTopic topic : topics) {
             payLoad = MqttBuildUtils.combineBytes(payLoad, topic.buildUnsubscribePayLoadPacket());
         }
+        //构建固定报头 Fixed header
+        byte[] remainingLength = MqttBuildUtils.buildRemainingLength(variableHeader.length + payLoad.length);
+        byte[] fixedHeader = MqttBuildUtils.combineBytes(header,remainingLength);
+        //构建整个报文
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
-        //设置报文长度
-        packet[1] = (byte) (packet.length - 2);
         //发送取消订阅
         synchronized (socketLock) {
             if(!isConnected)

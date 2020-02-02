@@ -62,14 +62,21 @@ public class MqttReceiver implements Runnable {
                         mqttMessage = new MqttPingrespPacket();
                     }
                     else {
-                        in.read();
                         continue;
                     }
-                    byte[] fixedHeader = new byte[2];
-                    fixedHeader[0] = temp[0];
-                    in.read(temp);
-                    fixedHeader[1] = temp[0];
-                    int size = fixedHeader[1] & 0xff;
+                    byte header = temp[0];
+                    int remainingLengthPos = 0;
+                    byte[] tempRemainingLength = new byte[4];
+                    do {
+                        in.read(temp);
+                        tempRemainingLength[remainingLengthPos++] = temp[0];
+                    } while((temp[0] & 0x80) != 0);
+                    byte[] fixedHeader = new byte[1 + remainingLengthPos];
+                    fixedHeader[0] = header;
+                    for(int i = 1;i < fixedHeader.length;i++) {
+                        fixedHeader[i] = tempRemainingLength[i - 1];
+                    }
+                    int size = MqttBuildUtils.getRemainingLength(fixedHeader);
                     byte[] residue = new byte[size];
                     in.read(residue);
                     byte[] data = MqttBuildUtils.combineBytes(fixedHeader,residue);

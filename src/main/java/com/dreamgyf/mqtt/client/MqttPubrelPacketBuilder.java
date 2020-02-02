@@ -1,7 +1,5 @@
 package com.dreamgyf.mqtt.client;
 
-import java.nio.charset.StandardCharsets;
-
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
 import com.dreamgyf.utils.MqttBuildUtils;

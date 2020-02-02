@@ -76,9 +76,6 @@ public class MqttClientBuilder {
 
     public MqttClientBuilder(MqttVersion version) {
         this.version = version;
-        //构建固定报头 Fixed header
-        fixedHeader = new byte[2];
-        fixedHeader[0] = 0b00010000;
         //设置协议版本
         protocolName = version.getProtocolName();
         protocolLevel = version.getProtocolLevel();
@@ -273,10 +270,13 @@ public class MqttClientBuilder {
             passwordByte = MqttBuildUtils.utf8EncodedStrings(password);
         //构建有效载荷 Payload
         payLoad = MqttBuildUtils.combineBytes(clientIdByte,willTopicByte,willMessageByte,usernameByte,passwordByte);
+        //构建固定报头 Fixed header
+        byte[] remainingLength = MqttBuildUtils.buildRemainingLength(variableHeader.length + payLoad.length);
+        byte[] header = new byte[1];
+        header[0] = 0b00010000;
+        fixedHeader = MqttBuildUtils.combineBytes(header,remainingLength);
         //构建整个报文
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
-        //设置报文长度
-        packet[1] = (byte) (packet.length - 2);
         return new MqttClient(broker,port,packet,keepAlive);
     }
 }

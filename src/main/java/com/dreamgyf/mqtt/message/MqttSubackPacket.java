@@ -1,5 +1,7 @@
 package com.dreamgyf.mqtt.message;
 
+import com.dreamgyf.utils.ByteUtils;
+
 public class MqttSubackPacket extends MqttPacket {
     public MqttSubackPacket() {
         super();
@@ -10,17 +12,10 @@ public class MqttSubackPacket extends MqttPacket {
     }
 
     public byte[] getPacketId() {
-        byte[] res = new byte[2];
-        res[0] = packet[2];
-        res[1] = packet[3];
-        return res;
+        return ByteUtils.getSection(packet, getLength() - getRemainingLength(), 2);
     }
 
     public byte[] getReturnCodeList() {
-        byte[] res = new byte[packet.length - 4];
-        for(int i = 4;i < packet.length;i++) {
-            res[i - 4] = packet[i];
-        }
-        return res;
+        return ByteUtils.getSection(packet, getLength() - getRemainingLength() + 2, getRemainingLength() - 2);
     }
 }

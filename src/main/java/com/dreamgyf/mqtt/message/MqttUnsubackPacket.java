@@ -1,5 +1,7 @@
 package com.dreamgyf.mqtt.message;
 
+import com.dreamgyf.utils.ByteUtils;
+
 public class MqttUnsubackPacket extends MqttPacket {
     public MqttUnsubackPacket() {
         super();
@@ -10,9 +12,6 @@ public class MqttUnsubackPacket extends MqttPacket {
     }
 
     public byte[] getPacketId() {
-        byte[] res = new byte[2];
-        res[0] = packet[2];
-        res[1] = packet[3];
-        return res;
+        return ByteUtils.getSection(packet, getLength() - getRemainingLength(), 2);
     }
 }
