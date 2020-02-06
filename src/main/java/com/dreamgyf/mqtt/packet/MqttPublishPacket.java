@@ -1,5 +1,7 @@
 package com.dreamgyf.mqtt.packet;
 
+import java.nio.charset.Charset;
+
 import com.dreamgyf.utils.ByteUtils;
 
 public class MqttPublishPacket extends MqttPacket {
@@ -41,6 +43,6 @@ public class MqttPublishPacket extends MqttPacket {
     }
 
     public String getMessage() {
-        return new String(packet, getQoS() != 0 ? (getLength() - getRemainingLength() + 2 + getTopicLength() + 2) : (getLength() - getRemainingLength() + 2 + getTopicLength()),getMessageLength());
+        return new String(packet, getQoS() != 0 ? (getLength() - getRemainingLength() + 2 + getTopicLength() + 2) : (getLength() - getRemainingLength() + 2 + getTopicLength()),getMessageLength(),Charset.forName("utf-8"));
     }
 }

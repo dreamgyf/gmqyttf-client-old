@@ -55,6 +55,27 @@ class MqttPublishPacketBuilder {
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
         return packet;
     }
-    
+
+
+    public MqttPublishOptions getOptions() {
+        return this.options;
+    }
+
+    public byte[] getId() {
+        return this.id;
+    }
+
+    public String getTopic() {
+        return this.topic;
+    }
+
+    public String getMessage() {
+        return this.message;
+    }
+
+    public MqttPublishCallback getCallback() {
+        return this.callback;
+    }
+
 
 }

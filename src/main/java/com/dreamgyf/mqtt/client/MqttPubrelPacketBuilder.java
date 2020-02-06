@@ -37,4 +37,20 @@ class MqttPubrelPacketBuilder {
     }
     
 
+    public byte[] getId() {
+        return this.id;
+    }
+
+    public String getTopic() {
+        return this.topic;
+    }
+
+    public String getMessage() {
+        return this.message;
+    }
+
+    public MqttPublishCallback getCallback() {
+        return this.callback;
+    }
+
 }

@@ -19,7 +19,7 @@ class MqttPing implements Runnable {
 
     private final Object socketLock;
 
-    private short keepAliveTime;
+    private int keepAliveTime;
 
     private final List<MqttPacket> packetList;
 
@@ -33,7 +33,7 @@ class MqttPing implements Runnable {
 
     private ExecutorService executorService = Executors.newFixedThreadPool(10);
 
-    protected MqttPing(final Socket socket, final Object socketLock, short keepAliveTime, final List<MqttPacket> packetList, final Object packetListLock,
+    protected MqttPing(final Socket socket, final Object socketLock, int keepAliveTime, final List<MqttPacket> packetList, final Object packetListLock,
             MqttConnectStateCallback callback) {
         this.socket = socket;
         this.socketLock = socketLock;

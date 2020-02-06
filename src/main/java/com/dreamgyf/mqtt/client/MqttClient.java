@@ -15,9 +15,12 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 import com.dreamgyf.exception.MqttException;
+import com.dreamgyf.exception.ValueRangeException;
 import com.dreamgyf.mqtt.MqttPacketType;
+import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.mqtt.client.callback.MqttConnectCallback;
 import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
 import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
@@ -26,15 +29,437 @@ import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
 import com.dreamgyf.mqtt.client.callback.MqttUnsubscribeCallback;
 import com.dreamgyf.mqtt.packet.MqttConnackPacket;
 import com.dreamgyf.mqtt.packet.MqttPacket;
-import com.dreamgyf.mqtt.packet.MqttPubackPacket;
-import com.dreamgyf.mqtt.packet.MqttPubcompPacket;
-import com.dreamgyf.mqtt.packet.MqttPubrecPacket;
 import com.dreamgyf.mqtt.packet.MqttSubackPacket;
 import com.dreamgyf.mqtt.packet.MqttUnsubackPacket;
 import com.dreamgyf.utils.ByteUtils;
 import com.dreamgyf.utils.MqttBuildUtils;
 
 public class MqttClient {
+
+    public static class Builder {
+
+        private MqttVersion version = MqttVersion.V_3_1_1;
+    
+        /**
+         * 清理会话 Clean Session
+         */
+        private boolean cleanSession;
+    
+        /**
+         * 遗嘱标志 Will Flag
+         */
+        private boolean willFlag;
+    
+        /**
+         * 遗嘱QoS Will QoS
+         */
+        private int willQoS = 0;
+    
+        /**
+         * 遗嘱保留 Will Retain
+         */
+        private boolean willRetain;
+    
+        /**
+         * 用户名标志 User Name Flag
+         */
+        private boolean usernameFlag;
+    
+        /**
+         * 密码标志 Password Flag
+         */
+        private boolean passwordFlag;
+    
+        /**
+         * 保持连接 Keep Alive
+         */
+        private int keepAliveTime = 10;
+    
+        /**
+         * 客户端标识符 Client Identifier
+         */
+        private String clientId = "default";
+    
+        /**
+         * 遗嘱主题 Will Topic
+         */
+        private String willTopic = "";
+    
+        /**
+         * 遗嘱消息 Will Message
+         */
+        private String willMessage = "";
+    
+        /**
+         * 用户名 User Name
+         */
+        private String username = "";
+    
+        /**
+         * 密码 Password
+         */
+        private String password = "";
+
+        private String broker = null;
+
+        private int port = 0;
+        
+        public Builder() {
+        }
+    
+        public MqttVersion getVersion() {
+            return this.version;
+        }
+    
+        public Builder setVersion(MqttVersion version) {
+            this.version = version;
+            return this;
+        }
+    
+        public boolean getCleanSession() {
+            return this.cleanSession;
+        }
+    
+        public Builder setCleanSession(boolean cleanSession) {
+            this.cleanSession = cleanSession;
+            return this;
+        }
+    
+        public boolean getWillFlag() {
+            return this.willFlag;
+        }
+    
+        public Builder setWillFlag(boolean willFlag) {
+            this.willFlag = willFlag;
+            return this;
+        }
+    
+        public int getWillQoS() {
+            return this.willQoS;
+        }
+    
+        public Builder setWillQoS(int willQoS) throws ValueRangeException {
+            if(willQoS < 0 || willQoS > 2)
+                throw new ValueRangeException("The value of QoS must be between 0 and 2.");
+            this.willQoS = willQoS;
+            return this;
+        }
+    
+        public boolean getWillRetain() {
+            return this.willRetain;
+        }
+    
+        public Builder setWillRetain(boolean willRetain) {
+            this.willRetain = willRetain;
+            return this;
+        }
+    
+        public boolean getUsernameFlag() {
+            return this.usernameFlag;
+        }
+    
+        public Builder setUsernameFlag(boolean usernameFlag) {
+            this.usernameFlag = usernameFlag;
+            return this;
+        }
+    
+        public boolean getPasswordFlag() {
+            return this.passwordFlag;
+        }
+    
+        public Builder setPasswordFlag(boolean passwordFlag) {
+            this.passwordFlag = passwordFlag;
+            return this;
+        }
+    
+        public int getKeepAliveTime() {
+            return this.keepAliveTime;
+        }
+    
+        public Builder setKeepAliveTime(int keepAliveTime) {
+            this.keepAliveTime = keepAliveTime;
+            return this;
+        }
+    
+        public String getClientId() {
+            return this.clientId;
+        }
+    
+        public Builder setClientId(String clientId) throws ValueRangeException {
+            if(!Pattern.matches("^[a-zA-Z0-9]+$",clientId))
+                throw new ValueRangeException("illegal character,Client ID can only contain letters and Numbers");
+            this.clientId = clientId;
+            return this;
+        }
+    
+        public String getWillTopic() {
+            return this.willTopic;
+        }
+    
+        public Builder setWillTopic(String willTopic) {
+            this.willTopic = willTopic;
+            return this;
+        }
+    
+        public String getWillMessage() {
+            return this.willMessage;
+        }
+    
+        public Builder setWillMessage(String willMessage) {
+            this.willMessage = willMessage;
+            return this;
+        }
+    
+        public String getUsername() {
+            return this.username;
+        }
+    
+        public Builder setUsername(String username) {
+            this.username = username;
+            return this;
+        }
+    
+        public String getPassword() {
+            return this.password;
+        }
+    
+        public Builder setPassword(String password) {
+            this.password = password;
+            return this;
+        }
+
+        public String getBroker() {
+            return this.broker;
+        }
+
+        public Builder setBroker(String broker) {
+            this.broker = broker;
+            return this;
+        }
+
+        public int getPort() {
+            return this.port;
+        }
+
+        public Builder setPort(int port) {
+            this.port = port;
+            return this;
+        }
+
+        public MqttClient build() {
+            return new MqttClient(version, cleanSession, willFlag, willQoS, willRetain, usernameFlag, passwordFlag, keepAliveTime, clientId, willTopic, willMessage, username, password, broker, port);
+        }
+    }
+    
+    private MqttVersion version;
+    
+    /**
+     * 清理会话 Clean Session
+     */
+    private boolean cleanSession;
+
+    /**
+     * 遗嘱标志 Will Flag
+     */
+    private boolean willFlag;
+
+    /**
+     * 遗嘱QoS Will QoS
+     */
+    private int willQoS = 0;
+
+    /**
+     * 遗嘱保留 Will Retain
+     */
+    private boolean willRetain;
+
+    /**
+     * 用户名标志 User Name Flag
+     */
+    private boolean usernameFlag;
+
+    /**
+     * 密码标志 Password Flag
+     */
+    private boolean passwordFlag;
+
+    /**
+     * 保持连接 Keep Alive
+     */
+    private int keepAliveTime = 10;
+
+    /**
+     * 客户端标识符 Client Identifier
+     */
+    private String clientId = "default";
+
+    /**
+     * 遗嘱主题 Will Topic
+     */
+    private String willTopic = "";
+
+    /**
+     * 遗嘱消息 Will Message
+     */
+    private String willMessage = "";
+
+    /**
+     * 用户名 User Name
+     */
+    private String username = "";
+
+    /**
+     * 密码 Password
+     */
+    private String password = "";
+
+    private String broker = null;
+
+    private int port = 0;
+
+    public MqttVersion getVersion() {
+        return this.version;
+    }
+
+    public void setVersion(MqttVersion version) {
+        this.version = version;
+    }
+
+    public boolean getCleanSession() {
+        return this.cleanSession;
+    }
+
+    public void setCleanSession(boolean cleanSession) {
+        this.cleanSession = cleanSession;
+    }
+
+    public boolean getWillFlag() {
+        return this.willFlag;
+    }
+
+    public void setWillFlag(boolean willFlag) {
+        this.willFlag = willFlag;
+    }
+
+    public int getWillQoS() {
+        return this.willQoS;
+    }
+
+    public void setWillQoS(int willQoS) throws ValueRangeException {
+        if(willQoS < 0 || willQoS > 2)
+            throw new ValueRangeException("The value of QoS must be between 0 and 2.");
+        this.willQoS = willQoS;
+    }
+
+    public boolean getWillRetain() {
+        return this.willRetain;
+    }
+
+    public void setWillRetain(boolean willRetain) {
+        this.willRetain = willRetain;
+    }
+
+    public boolean getUsernameFlag() {
+        return this.usernameFlag;
+    }
+
+    public void setUsernameFlag(boolean usernameFlag) {
+        this.usernameFlag = usernameFlag;
+    }
+
+    public boolean getPasswordFlag() {
+        return this.passwordFlag;
+    }
+
+    public void setPasswordFlag(boolean passwordFlag) {
+        this.passwordFlag = passwordFlag;
+    }
+
+    public int getKeepAliveTime() {
+        return this.keepAliveTime;
+    }
+
+    public void setKeepAliveTime(int keepAliveTime) {
+        this.keepAliveTime = keepAliveTime;
+    }
+
+    public String getClientId() {
+        return this.clientId;
+    }
+
+    public void setClientId(String clientId) throws ValueRangeException {
+        if(!Pattern.matches("^[a-zA-Z0-9]+$",clientId))
+            throw new ValueRangeException("illegal character,Client ID can only contain letters and Numbers");
+        this.clientId = clientId;
+    }
+
+    public String getWillTopic() {
+        return this.willTopic;
+    }
+
+    public void setWillTopic(String willTopic) {
+        this.willTopic = willTopic;
+    }
+
+    public String getWillMessage() {
+        return this.willMessage;
+    }
+
+    public void setWillMessage(String willMessage) {
+        this.willMessage = willMessage;
+    }
+
+    public String getUsername() {
+        return this.username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return this.password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getBroker() {
+        return this.broker;
+    }
+
+    public void setBroker(String broker) {
+        this.broker = broker;
+    }
+
+    public int getPort() {
+        return this.port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
+    private MqttClient(MqttVersion version, boolean cleanSession, boolean willFlag, int willQoS, 
+                        boolean willRetain, boolean usernameFlag, boolean passwordFlag, int keepAliveTime, 
+                        String clientId, String willTopic, String willMessage, String username, String password, 
+                        String broker, int port) {
+        this.version = version;
+        this.cleanSession = cleanSession;
+        this.willFlag = willFlag;
+        this.willQoS = willQoS;
+        this.willRetain = willRetain;
+        this.usernameFlag = usernameFlag;
+        this.passwordFlag = passwordFlag;
+        this.clientId = clientId;
+        this.willTopic = willTopic;
+        this.willMessage = willMessage;
+        this.username = username;
+        this.password = password;
+        this.broker = broker;
+        this.port = port;
+    }
 
     private ExecutorService executorService = Executors.newFixedThreadPool(10);
 
@@ -44,23 +469,11 @@ public class MqttClient {
 
     private final Object packetListLock = new Object();
 
-    private final Object publishQueueLock = new Object();
-
-    private final Object pubrelQueueLock = new Object();
-
     private final Object subscribePacketIdSetLock = new Object();
 
     private Socket socket;
 
     private boolean isConnected = false;
-
-    private String broker;
-
-    private short keepAliveTime;
-
-    private int port;
-
-    private byte[] connectMessage;
 
     private Set<Short> packetIdSet = new HashSet<>();
 
@@ -78,23 +491,83 @@ public class MqttClient {
 
     private MqttMessageHandler messageHandler;
 
+    private MqttMessageQueueManger messageQueueManger;
+
     private MqttMessageCallback messageCallback;
 
-    protected MqttClient(String broker, int port, byte[] message, short keepAliveTime) {
-        this.broker = broker;
-        this.port = port;
-        this.connectMessage = message;
-        this.keepAliveTime = keepAliveTime;
-    }
-
-    public void connect() throws IOException {
+    public void connect() throws IOException, MqttException {
         connect(null);
     }
 
-    public void connect(MqttConnectCallback callback) throws IOException {
+    public void connect(MqttConnectCallback callback) throws IOException, MqttException {
+        if(broker == null || broker.equals("") || port == 0)
+            throw new MqttException("Need to set borker and port");
+        //构建连接报文
+        //构建可变报头 Variable header
+        byte[] protocolName = version.getProtocolName();
+        byte protocolLevel = version.getProtocolLevel();
+        //构建连接标志 Connect Flags
+        byte connectFlags = 0;
+        if(cleanSession)
+            connectFlags |= 0b00000010;
+        if(willFlag) {
+            connectFlags |= 0b00000100;
+            connectFlags |= (willQoS << 3);
+            if(willRetain)
+                connectFlags |= 0b00100000;
+        }
+        if(usernameFlag)
+            connectFlags |= 0b10000000;
+        if(passwordFlag)
+            connectFlags |= 0b01000000;
+        byte[] variableHeader = new byte[protocolName.length + 4]; //Protocol Name + Protocol Level + Connect Flags + Keep Alive
+        int pos = 0;
+        while(pos < protocolName.length) {
+            variableHeader[pos] = protocolName[pos];
+            pos++;
+        }
+        variableHeader[pos++] = protocolLevel;
+        variableHeader[pos++] = connectFlags;
+        byte[] keepAlive = ByteUtils.shortToByte2((short) keepAliveTime);
+        variableHeader[pos++] = keepAlive[0];
+        variableHeader[pos] = keepAlive[1];
+        //构建客户端标识符 Client Identifier
+        byte[] clientIdByte = MqttBuildUtils.utf8EncodedStrings(clientId);
+        //构建遗嘱主题 Will Topic 遗嘱消息 Will Message
+        byte[] willTopicByte = new byte[0];
+        byte[] willMessageByte = new byte[0];
+        if(willFlag) {
+            willTopicByte = MqttBuildUtils.utf8EncodedStrings(willTopic);
+            willMessageByte = MqttBuildUtils.utf8EncodedStrings(willTopic);
+        }
+        //构建用户名 User Name
+        byte[] usernameByte = new byte[0];
+        if(usernameFlag)
+            usernameByte = MqttBuildUtils.utf8EncodedStrings(username);
+        //构建密码 Password
+        byte[] passwordByte = new byte[0];
+        if(passwordFlag)
+            passwordByte = MqttBuildUtils.utf8EncodedStrings(password);
+        //构建有效载荷 Payload
+        byte[] payLoad = MqttBuildUtils.combineBytes(clientIdByte,willTopicByte,willMessageByte,usernameByte,passwordByte);
+        //构建固定报头 Fixed header
+        byte[] remainingLength = MqttBuildUtils.buildRemainingLength(variableHeader.length + payLoad.length);
+        byte[] header = new byte[1];
+        header[0] = 0b00010000;
+        byte[] fixedHeader = MqttBuildUtils.combineBytes(header,remainingLength);
+        //构建整个报文
+        byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
+
+        //清空消息
+        packetList = new ArrayList<>();
+        if(cleanSession) {
+            publishQueue.clear();
+            pubrelQueue.clear();
+        }
+
         socket = new Socket(broker,port);
         OutputStream os = socket.getOutputStream();
-        os.write(connectMessage);
+        os.write(packet);
         isConnected = socket.isConnected();
 
         //创建报文接收器
@@ -116,6 +589,10 @@ public class MqttClient {
         //创建消息处理器
         messageHandler = new MqttMessageHandler(socket, socketLock, packetList, packetListLock, messageCallback);
         executorService.execute(messageHandler);
+
+        //创建消息队列管理器
+        messageQueueManger = new MqttMessageQueueManger(socket, socketLock, packetList, publishQueue, packetIdSet, pubrelQueue, mqttPing, publishQueue, pubrelQueue);
+        messageQueueManger.run();
     }
 
     public boolean isConnected() {
@@ -193,199 +670,7 @@ public class MqttClient {
         }
         else
             mqttPublishPacketBuilder = new MqttPublishPacketBuilder(new byte[0], topic, message, options, callback);
-        byte[] packet = mqttPublishPacketBuilder.build();
-        //发送消息
-        synchronized (socketLock) {
-            if(!isConnected)
-                throw new MqttException("Disconnected");
-            OutputStream os = socket.getOutputStream();
-            os.write(packet);
-            mqttPing.updateLastReqTime();
-        }
-        //放入发布队列
-        if(options.getQoS() != 0) {
-            publishQueue.offer(mqttPublishPacketBuilder);
-        }
-
-        if(options.getQoS() == 1) {
-            PubackListener pubackListener = new PubackListener(packetId,topic,message,callback);
-            executorService.execute(pubackListener);
-        } 
-        else if(options.getQoS() == 2) {
-            PubrecListener pubrecListener = new PubrecListener(packetId,topic,message,callback);
-            executorService.execute(pubrecListener);
-        }
-           
-    }
-
-    private class PubackListener implements Runnable {
-
-        private byte[] id;
-
-        private String topic;
-
-        private String message;
-
-        private MqttPublishCallback callback;
-
-        private PubackListener(byte[] id, String topic, String message, MqttPublishCallback callback) {
-            super();
-            this.id = id;
-            this.topic = topic;
-            this.message = message;
-            this.callback = callback;
-        }
-
-        @Override
-        public void run() {
-            Thread.currentThread().setName("Thread-PubackListener");
-            boolean isPubacked = false;
-            while (!isPubacked){
-                synchronized (packetListLock) {
-                    Iterator<MqttPacket> iterator = packetList.iterator();
-                    while(iterator.hasNext()){
-                        MqttPacket mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttPubackPacket) {
-                            synchronized (publishQueueLock) {
-                                if(Arrays.equals(((MqttPubackPacket) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
-                                    publishQueue.poll();
-                                    synchronized (packetIdSetLock) {
-                                        packetIdSet.remove(ByteUtils.byte2ToShort(id));
-                                    }
-                                    iterator.remove();
-                                    isPubacked = true;
-                                }
-                            }
-                        }
-                    }
-                }
-                if(isPubacked && callback != null)
-                    callback.messageArrived(topic,message);
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-    private class PubrecListener implements Runnable {
-
-        private byte[] id;
-
-        private String topic;
-
-        private String message;
-
-        private MqttPublishCallback callback;
-
-        private PubrecListener(byte[] id, String topic, String message, MqttPublishCallback callback) {
-            super();
-            this.id = id;
-            this.topic = topic;
-            this.message = message;
-            this.callback = callback;
-        }
-
-        @Override
-        public void run() {
-            Thread.currentThread().setName("Thread-PubrecListener");
-            boolean isPubreced = false;
-            while (!isPubreced){
-                synchronized (packetListLock) {
-                    Iterator<MqttPacket> iterator = packetList.iterator();
-                    while(iterator.hasNext()){
-                        MqttPacket mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttPubrecPacket) {
-                            synchronized (publishQueueLock) {
-                                if(Arrays.equals(((MqttPubrecPacket) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
-                                    publishQueue.poll();
-                                    iterator.remove();
-                                    isPubreced = true;
-                                    synchronized (pubrelQueueLock) {
-                                        MqttPubrelPacketBuilder mqttPubrelPacketBuilder = new MqttPubrelPacketBuilder(id, topic, message, callback);
-                                        pubrelQueue.offer(mqttPubrelPacketBuilder);
-                                        byte[] packet = mqttPubrelPacketBuilder.build();
-                                        
-                                        synchronized (socketLock) {
-                                            if(isConnected) {
-                                                try {
-                                                    OutputStream os = socket.getOutputStream();
-                                                    os.write(packet);
-                                                    PubcompListener pubcompListener = new PubcompListener(id,topic,message,callback);
-                                                    executorService.execute(pubcompListener);
-                                                } catch (IOException e) {
-                                                    e.printStackTrace();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-    private class PubcompListener implements Runnable {
-
-        private byte[] id;
-
-        private String topic;
-
-        private String message;
-
-        private MqttPublishCallback callback;
-
-        private PubcompListener(byte[] id, String topic, String message, MqttPublishCallback callback) {
-            super();
-            this.id = id;
-            this.topic = topic;
-            this.message = message;
-            this.callback = callback;
-        }
-
-        @Override
-        public void run() {
-            Thread.currentThread().setName("Thread-PubcompListener");
-            boolean isPubcomped = false;
-            while (!isPubcomped){
-                synchronized (packetListLock) {
-                    Iterator<MqttPacket> iterator = packetList.iterator();
-                    while(iterator.hasNext()){
-                        MqttPacket mqttMessage = iterator.next();
-                        if(mqttMessage instanceof MqttPubcompPacket) {
-                            synchronized (pubrelQueueLock) {
-                                if(Arrays.equals(((MqttPubcompPacket) mqttMessage).getPacketId(), id) && Arrays.equals(pubrelQueue.peek().getPacketId(), id)) {
-                                    pubrelQueue.poll();
-                                    synchronized (packetIdSetLock) {
-                                        packetIdSet.remove(ByteUtils.byte2ToShort(id));
-                                    }
-                                    iterator.remove();
-                                    isPubcomped = true;
-                                }
-                            }
-                        }
-                    }
-                }
-                if(isPubcomped && callback != null)
-                    callback.messageArrived(topic,message);
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+        publishQueue.offer(mqttPublishPacketBuilder);
     }
 
     public void subscribe(MqttTopic topic) throws MqttException, IOException {
@@ -631,6 +916,7 @@ public class MqttClient {
         byte[] packet = new byte[2];
         packet[0] = MqttPacketType.DISCONNECT.getCode();
         packet[0] <<= 4;
+        messageQueueManger.stop();
         receiver.stop();
         mqttPing.stop();
         mqttPing = null;
