@@ -31,7 +31,7 @@ public class MqttPublishPacket extends MqttPacket {
     }
 
     public String getTopic() {
-        return new String(packet,4,getTopicLength());
+        return new String(packet, getLength() - getRemainingLength() + 2,getTopicLength(),Charset.forName("utf-8"));
     }
 
     public byte[] getPacketId() {
