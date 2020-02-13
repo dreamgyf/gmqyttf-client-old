@@ -934,5 +934,11 @@ public class MqttClient {
 
     public void setCallback(MqttMessageCallback callback) {
         this.messageCallback = callback;
+        //重新指定消息处理器
+        if(messageHandler != null) {
+            messageHandler.stop();
+            messageHandler = new MqttMessageHandler(socket, socketLock, packetList, packetListLock, messageCallback);
+            executorService.execute(messageHandler);
+        }
     }
 }
