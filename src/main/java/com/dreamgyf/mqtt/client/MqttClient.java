@@ -681,7 +681,7 @@ public class MqttClient {
         subscribe(Arrays.asList(topic),callback);
     }
 
-    public void subscribe(MqttTopic[] topics) throws MqttException, IOException {
+    public void subscribe(MqttTopic... topics) throws MqttException, IOException {
         subscribe(Arrays.asList(topics),null);
     }
 

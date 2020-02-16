@@ -94,6 +94,9 @@ class MqttMessageQueueManger {
                         synchronized (publishQueueLock) {
                             publishQueue.poll();
                         }
+                        if(callback != null) {
+                            callback.messageArrived(topic, message);
+                        }
                     }
                     else if(options.getQoS() == 1) {
                         boolean isPubacked = false;
