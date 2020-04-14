@@ -1,38 +1,24 @@
 package com.dreamgyf.mqtt.client;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
-
 import com.dreamgyf.exception.MqttException;
 import com.dreamgyf.exception.ValueRangeException;
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.MqttVersion;
-import com.dreamgyf.mqtt.client.callback.MqttConnectCallback;
-import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
-import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
-import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
-import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
-import com.dreamgyf.mqtt.client.callback.MqttUnsubscribeCallback;
+import com.dreamgyf.mqtt.client.callback.*;
 import com.dreamgyf.mqtt.packet.MqttConnackPacket;
 import com.dreamgyf.mqtt.packet.MqttPacket;
 import com.dreamgyf.mqtt.packet.MqttSubackPacket;
 import com.dreamgyf.mqtt.packet.MqttUnsubackPacket;
 import com.dreamgyf.utils.ByteUtils;
 import com.dreamgyf.utils.MqttBuildUtils;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 public class MqttClient {
 
@@ -936,9 +922,10 @@ public class MqttClient {
         this.messageCallback = callback;
         //重新指定消息处理器
         if(messageHandler != null) {
-            messageHandler.stop();
-            messageHandler = new MqttMessageHandler(socket, socketLock, packetList, packetListLock, messageCallback);
-            executorService.execute(messageHandler);
+            messageHandler.setCallback(callback);
+//            messageHandler.stop();
+//            messageHandler = new MqttMessageHandler(socket, socketLock, packetList, packetListLock, messageCallback);
+//            executorService.execute(messageHandler);
         }
     }
 }

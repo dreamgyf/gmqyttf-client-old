@@ -1,23 +1,18 @@
 package com.dreamgyf.mqtt.client;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
 import com.dreamgyf.mqtt.packet.MqttPacket;
 import com.dreamgyf.mqtt.packet.MqttPubackPacket;
 import com.dreamgyf.mqtt.packet.MqttPubcompPacket;
 import com.dreamgyf.mqtt.packet.MqttPubrecPacket;
 import com.dreamgyf.utils.ByteUtils;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 class MqttMessageQueueManger {
 
@@ -51,7 +46,7 @@ class MqttMessageQueueManger {
 
     private MqttPubrelQueueManger pubrelQueueManger = new MqttPubrelQueueManger();
 
-    public MqttMessageQueueManger(final Socket socket, final Object socketLock, final List<MqttPacket> packetList, final Object packetListLock, 
+    protected MqttMessageQueueManger(final Socket socket, final Object socketLock, final List<MqttPacket> packetList, final Object packetListLock,
                                     final Set<Short> packetIdSet, final Object packetIdSetLock,
                                     final MqttPing mqttPing, final Queue<MqttPublishPacketBuilder> publishQueue, final Queue<MqttPubrelPacketBuilder> pubrelQueue) {
         this.socket = socket;
@@ -106,7 +101,7 @@ class MqttMessageQueueManger {
                                 while(iterator.hasNext()){
                                     MqttPacket mqttMessage = iterator.next();
                                     if(mqttMessage instanceof MqttPubackPacket) {
-                                        if(Arrays.equals(((MqttPubackPacket) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
+                                        if(Arrays.equals(((MqttPubackPacket) mqttMessage).getPacketId(), id) && publishQueue.peek() != null && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
                                             synchronized (publishQueueLock) {
                                                 publishQueue.poll();
                                             }
@@ -137,7 +132,7 @@ class MqttMessageQueueManger {
                                     MqttPacket mqttMessage = iterator.next();
                                     if(mqttMessage instanceof MqttPubrecPacket) {
                                         synchronized (publishQueueLock) {
-                                            if(Arrays.equals(((MqttPubrecPacket) mqttMessage).getPacketId(), id) && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
+                                            if(Arrays.equals(((MqttPubrecPacket) mqttMessage).getPacketId(), id) && publishQueue.peek() != null && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
                                                 publishQueue.poll();
                                                 iterator.remove();
                                                 isPubreced = true;
@@ -203,7 +198,7 @@ class MqttMessageQueueManger {
                                 MqttPacket mqttMessage = iterator.next();
                                 if(mqttMessage instanceof MqttPubcompPacket) {
                                     synchronized (pubrelQueueLock) {
-                                        if(Arrays.equals(((MqttPubcompPacket) mqttMessage).getPacketId(), id) && Arrays.equals(pubrelQueue.peek().getPacketId(), id)) {
+                                        if(Arrays.equals(((MqttPubcompPacket) mqttMessage).getPacketId(), id) && pubrelQueue.peek() != null && Arrays.equals(pubrelQueue.peek().getPacketId(), id)) {
                                             pubrelQueue.poll();
                                             synchronized (packetIdSetLock) {
                                                 packetIdSet.remove(ByteUtils.byte2ToShort(id));

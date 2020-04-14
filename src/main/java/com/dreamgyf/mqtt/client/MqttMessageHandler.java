@@ -1,18 +1,5 @@
 package com.dreamgyf.mqtt.client;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.Socket;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.client.callback.MqttMessageCallback;
 import com.dreamgyf.mqtt.packet.MqttPacket;
@@ -20,6 +7,13 @@ import com.dreamgyf.mqtt.packet.MqttPublishPacket;
 import com.dreamgyf.mqtt.packet.MqttPubrelPacket;
 import com.dreamgyf.utils.ByteUtils;
 import com.dreamgyf.utils.MqttBuildUtils;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MqttMessageHandler implements Runnable {
     
@@ -129,7 +123,7 @@ public class MqttMessageHandler implements Runnable {
                                             try {
                                                 OutputStream os = socket.getOutputStream();
                                                 os.write(packet);
-                                                PubrelListener pubrelListener = new PubrelListener(packetId, topic, message, callback);
+                                                PubrelListener pubrelListener = new PubrelListener(packetId, topic, message);
                                                 executorService.execute(pubrelListener);
                                             } catch (IOException e) {
                                                 e.printStackTrace();
@@ -163,14 +157,11 @@ public class MqttMessageHandler implements Runnable {
 
         private String message;
 
-        private MqttMessageCallback callback;
-
-        private PubrelListener(byte[] id, String topic, String message, MqttMessageCallback callback) {
+        private PubrelListener(byte[] id, String topic, String message) {
             super();
             this.id = id;
             this.topic = topic;
             this.message = message;
-            this.callback = callback;
         }
 
         @Override
@@ -184,7 +175,7 @@ public class MqttMessageHandler implements Runnable {
                         MqttPacket mqttMessage = iterator.next();
                         if(mqttMessage instanceof MqttPubrelPacket) {
                             synchronized (pubrecQueueLock) {
-                                if(Arrays.equals(((MqttPubrelPacket) mqttMessage).getPacketId(), id) && Arrays.equals(ByteUtils.shortToByte2(pubrecQueue.peek()), id)) {
+                                if(Arrays.equals(((MqttPubrelPacket) mqttMessage).getPacketId(), id) && pubrecQueue.peek() != null && Arrays.equals(ByteUtils.shortToByte2(pubrecQueue.peek()), id)) {
                                     pubrecQueue.poll();
                                     iterator.remove();
                                     isPubreled = true;
@@ -228,6 +219,10 @@ public class MqttMessageHandler implements Runnable {
                 }
             }
         }
+    }
+
+    protected void setCallback(MqttMessageCallback callback) {
+        this.callback = callback;
     }
 
     protected void stop() {
