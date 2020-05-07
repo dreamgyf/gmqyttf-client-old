@@ -1,18 +1,22 @@
 package com.dreamgyf.mqtt.client;
 
+import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
 import com.dreamgyf.mqtt.packet.MqttPacket;
 import com.dreamgyf.mqtt.packet.MqttPubackPacket;
 import com.dreamgyf.mqtt.packet.MqttPubcompPacket;
 import com.dreamgyf.mqtt.packet.MqttPubrecPacket;
 import com.dreamgyf.utils.ByteUtils;
+import com.dreamgyf.utils.MqttBuildUtils;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 class MqttMessageQueueManger {
 
@@ -21,10 +25,12 @@ class MqttMessageQueueManger {
     private final Socket socket;
 
     private final Object socketLock;
-    
-    private final List<MqttPacket> packetList;
 
-    private final Object packetListLock;
+    private final LinkedBlockingQueue<MqttPubackPacket> pubackQueue;
+
+    private final LinkedBlockingQueue<MqttPubrecPacket> pubrecQueue;
+
+    private final LinkedBlockingQueue<MqttPubcompPacket> pubcompQueue;
 
     private final Set<Short> packetIdSet = new HashSet<>();
 
@@ -32,30 +38,33 @@ class MqttMessageQueueManger {
 
     private final MqttPing mqttPing;
 
-    private final Queue<MqttPublishPacketBuilder> publishQueue;
+    private final LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue;
 
-    private final Queue<MqttPubrelPacketBuilder> pubrelQueue;
-
-    private final Object publishQueueLock = new Object();
-
-    private final Object pubrelQueueLock = new Object();
+    private final ConcurrentHashMap<Short,MqttPublishPacketBuilder> waitPublishCompleteMap = new ConcurrentHashMap<>();
 
     private boolean isRunning = false;
 
-    private MqttPublishQueueManger publishQueueManger = new MqttPublishQueueManger();
+    private final MqttPublishQueueManger publishQueueManger = new MqttPublishQueueManger();
 
-    private MqttPubrelQueueManger pubrelQueueManger = new MqttPubrelQueueManger();
+    private final MqttPubackQueueManger pubackQueueManger = new MqttPubackQueueManger();
 
-    protected MqttMessageQueueManger(final Socket socket, final Object socketLock, final List<MqttPacket> packetList, final Object packetListLock,
-                                    final Set<Short> packetIdSet, final Object packetIdSetLock,
-                                    final MqttPing mqttPing, final Queue<MqttPublishPacketBuilder> publishQueue, final Queue<MqttPubrelPacketBuilder> pubrelQueue) {
+    private final MqttPubrecQueueManger pubrecQueueManger = new MqttPubrecQueueManger();
+
+    private final MqttPubcompQueueManger pubcompQueueManger = new MqttPubcompQueueManger();
+
+    protected MqttMessageQueueManger(final Socket socket, final Object socketLock,
+                                     final LinkedBlockingQueue<MqttPubackPacket> pubackQueue,
+                                     final LinkedBlockingQueue<MqttPubrecPacket> pubrecQueue,
+                                     final LinkedBlockingQueue<MqttPubcompPacket> pubcompQueue,
+                                     final MqttPing mqttPing,
+                                     final LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue) {
         this.socket = socket;
         this.socketLock = socketLock;
-        this.packetList = packetList;
-        this.packetListLock = packetListLock;
+        this.pubackQueue = pubackQueue;
+        this.pubrecQueue = pubrecQueue;
+        this.pubcompQueue = pubcompQueue;
         this.mqttPing = mqttPing;
         this.publishQueue = publishQueue;
-        this.pubrelQueue = pubrelQueue;
     }
 
     private class MqttPublishQueueManger implements Runnable {
@@ -64,8 +73,9 @@ class MqttMessageQueueManger {
         public void run() {
             Thread.currentThread().setName("Thread-MqttPublishQueueManger");
             while(isRunning) {
-                if(publishQueue.peek() != null) {
-                    MqttPublishPacketBuilder publishPacketBuilder = publishQueue.peek();
+                //publishQueue线程安全且只有这一个线程使用，不加锁
+                try {
+                    MqttPublishPacketBuilder publishPacketBuilder = publishQueue.take();
                     byte[] id = publishPacketBuilder.getId();
                     String topic = publishPacketBuilder.getTopic();
                     String message = publishPacketBuilder.getMessage();
@@ -76,87 +86,28 @@ class MqttMessageQueueManger {
                     synchronized (socketLock) {
                         if(socket.isConnected()) {
                             OutputStream os;
-							try {
+                            try {
                                 os = socket.getOutputStream();
                                 os.write(packet);
                                 mqttPing.updateLastReqTime();
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
                         }
                     }
                     if(options.getQoS() == 0) {
-                        synchronized (publishQueueLock) {
-                            publishQueue.poll();
-                        }
                         if(callback != null) {
                             callback.messageArrived(topic, message);
                         }
                     }
                     else if(options.getQoS() == 1) {
-                        boolean isPubacked = false;
-                        while (!isPubacked){
-                            synchronized (packetListLock) {
-                                Iterator<MqttPacket> iterator = packetList.iterator();
-                                while(iterator.hasNext()){
-                                    MqttPacket mqttMessage = iterator.next();
-                                    if(mqttMessage instanceof MqttPubackPacket) {
-                                        if(Arrays.equals(((MqttPubackPacket) mqttMessage).getPacketId(), id) && publishQueue.peek() != null && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
-                                            synchronized (publishQueueLock) {
-                                                publishQueue.poll();
-                                            }
-                                            synchronized (packetIdSetLock) {
-                                                packetIdSet.remove(ByteUtils.byte2ToShort(id));
-                                            }
-                                            iterator.remove();
-                                            isPubacked = true;
-                                        }
-                                    }
-                                }
-                            }
-                            if(isPubacked && callback != null)
-                                callback.messageArrived(topic,message);
-                            try {
-                                Thread.sleep(100);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    } 
-                    else if(options.getQoS() == 2) {
-                        boolean isPubreced = false;
-                        while (!isPubreced){
-                            synchronized (packetListLock) {
-                                Iterator<MqttPacket> iterator = packetList.iterator();
-                                while(iterator.hasNext()){
-                                    MqttPacket mqttMessage = iterator.next();
-                                    if(mqttMessage instanceof MqttPubrecPacket) {
-                                        synchronized (publishQueueLock) {
-                                            if(Arrays.equals(((MqttPubrecPacket) mqttMessage).getPacketId(), id) && publishQueue.peek() != null && Arrays.equals(publishQueue.peek().getPacketId(), id)) {
-                                                publishQueue.poll();
-                                                iterator.remove();
-                                                isPubreced = true;
-                                                synchronized (pubrelQueueLock) {
-                                                    MqttPubrelPacketBuilder mqttPubrelPacketBuilder = new MqttPubrelPacketBuilder(id, topic, message, callback);
-                                                    pubrelQueue.offer(mqttPubrelPacketBuilder);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-            
-                            try {
-                                Thread.sleep(100);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-                        }
+                        Short packetIdShort = ByteUtils.byte2ToShort(id);
+                        waitPublishCompleteMap.put(packetIdShort,publishPacketBuilder);
                     }
-                }
-
-                try {
-                    Thread.sleep(100);
+                    else if(options.getQoS() == 2) {
+                        Short packetIdShort = ByteUtils.byte2ToShort(id);
+                        waitPublishCompleteMap.put(packetIdShort,publishPacketBuilder);
+                    }
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -164,64 +115,87 @@ class MqttMessageQueueManger {
         }
     }
 
-    private class MqttPubrelQueueManger implements Runnable {
-
+    private class MqttPubackQueueManger implements Runnable {
         @Override
         public void run() {
-            Thread.currentThread().setName("Thread-MqttPubrelQueueManger");
+            Thread.currentThread().setName("Thread-MqttPubackQueueManger");
             while(isRunning) {
-                if(pubrelQueue.peek() != null) {
-                    MqttPubrelPacketBuilder pubrelPacketBuilder = pubrelQueue.peek();
-                    byte[] id = pubrelPacketBuilder.getId();
-                    String topic = pubrelPacketBuilder.getTopic();
-                    String message = pubrelPacketBuilder.getMessage();
-                    MqttPublishCallback callback = pubrelPacketBuilder.getCallback();
-                    byte[] packet = pubrelPacketBuilder.build();
+                try {
+                    MqttPubackPacket pubackPacket = pubackQueue.take();
+                    byte[] packetId = pubackPacket.getPacketId();
+                    Short packetIdShort = ByteUtils.byte2ToShort(packetId);
+                    synchronized (packetIdSetLock) {
+                        packetIdSet.remove(packetIdShort);
+                    }
+                    MqttPublishPacketBuilder publishPacketBuilder = waitPublishCompleteMap.get(packetIdShort);
+                    String topic = publishPacketBuilder.getTopic();
+                    String message = publishPacketBuilder.getMessage();
+                    MqttPublishCallback callback = publishPacketBuilder.getCallback();
+                    if(callback != null)
+                        callback.messageArrived(topic, message);
+                    waitPublishCompleteMap.remove(packetIdShort);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private class MqttPubrecQueueManger implements Runnable {
+        @Override
+        public void run() {
+            Thread.currentThread().setName("Thread-MqttPubrecQueueManger");
+            while(isRunning) {
+                try {
+                    MqttPubrecPacket pubrecPacket = pubrecQueue.take();
+                    byte[] packetId = pubrecPacket.getPacketId();
+                    Short packetIdShort = ByteUtils.byte2ToShort(packetId);
+                    byte[] fixedHeader = new byte[2];
+                    fixedHeader[0] = MqttPacketType.PUBREL.getCode();
+                    fixedHeader[0] <<= 4;
+                    fixedHeader[0] |= 0b00000010;
+                    fixedHeader[1] = 0b00000010;
+                    byte[] variableHeader = packetId;
+                    byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader);
                     //发送消息
                     synchronized (socketLock) {
                         if(socket.isConnected()) {
                             OutputStream os;
-							try {
+                            try {
                                 os = socket.getOutputStream();
                                 os.write(packet);
                                 mqttPing.updateLastReqTime();
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-                        }
-                    }
-                    boolean isPubcomped = false;
-                    while (!isPubcomped){
-                        synchronized (packetListLock) {
-                            Iterator<MqttPacket> iterator = packetList.iterator();
-                            while(iterator.hasNext()){
-                                MqttPacket mqttMessage = iterator.next();
-                                if(mqttMessage instanceof MqttPubcompPacket) {
-                                    synchronized (pubrelQueueLock) {
-                                        if(Arrays.equals(((MqttPubcompPacket) mqttMessage).getPacketId(), id) && pubrelQueue.peek() != null && Arrays.equals(pubrelQueue.peek().getPacketId(), id)) {
-                                            pubrelQueue.poll();
-                                            synchronized (packetIdSetLock) {
-                                                packetIdSet.remove(ByteUtils.byte2ToShort(id));
-                                            }
-                                            iterator.remove();
-                                            isPubcomped = true;
-                                        }
-                                    }
-                                }
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
                         }
-                        if(isPubcomped && callback != null)
-                            callback.messageArrived(topic,message);
-                        try {
-                            Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
                     }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
+            }
+        }
+    }
 
+    private class MqttPubcompQueueManger implements Runnable {
+        @Override
+        public void run() {
+            Thread.currentThread().setName("Thread-MqttPubcompQueueManger");
+            while(isRunning) {
                 try {
-                    Thread.sleep(100);
+                    MqttPubcompPacket pubcompPacket = pubcompQueue.take();
+                    byte[] packetId = pubcompPacket.getPacketId();
+                    Short packetIdShort = ByteUtils.byte2ToShort(packetId);
+                    synchronized (packetIdSetLock) {
+                        packetIdSet.remove(packetIdShort);
+                    }
+                    MqttPublishPacketBuilder publishPacketBuilder = waitPublishCompleteMap.get(packetIdShort);
+                    String topic = publishPacketBuilder.getTopic();
+                    String message = publishPacketBuilder.getMessage();
+                    MqttPublishCallback callback = publishPacketBuilder.getCallback();
+                    if(callback != null)
+                        callback.messageArrived(topic, message);
+                    waitPublishCompleteMap.remove(packetIdShort);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -234,7 +208,9 @@ class MqttMessageQueueManger {
             isRunning = true;
             executorService = Executors.newFixedThreadPool(10);
             executorService.execute(publishQueueManger);
-            executorService.execute(pubrelQueueManger);
+            executorService.execute(pubackQueueManger);
+            executorService.execute(pubrecQueueManger);
+            executorService.execute(pubcompQueueManger);
         }
     }
 

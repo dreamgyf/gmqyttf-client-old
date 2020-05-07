@@ -22,16 +22,13 @@ public class MqttReceiver implements Runnable {
 
     private Socket socket;
 
-    private List<MqttPacket> packetList;
-
-    private final Object packetListLock;
+    private volatile MqttPacketQueue mqttPacketQueue;
 
     private boolean isRunning = true;
 
-    public MqttReceiver(Socket socket, List<MqttPacket> packetList, final Object packetListLock) {
+    public MqttReceiver(Socket socket, MqttPacketQueue mqttPacketQueue) {
         this.socket = socket;
-        this.packetList = packetList;
-        this.packetListLock = packetListLock;
+        this.mqttPacketQueue = mqttPacketQueue;
     }
 
     @Override
@@ -42,33 +39,33 @@ public class MqttReceiver implements Runnable {
                 InputStream in = socket.getInputStream();
                 byte[] temp = new byte[1];
                 if(in.read(temp) != -1){
-                    MqttPacket mqttMessage;
-                    if(((temp[0] & 0xff) >> 4) == MqttPacketType.CONNACK.getCode()) {
-                        mqttMessage = new MqttConnackPacket();
+                    MqttPacket mqttPacket;
+                    if(((temp[0] & 0xff) >>> 4) == MqttPacketType.CONNACK.getCode()) {
+                        mqttPacket = new MqttConnackPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBLISH.getCode()) {
-                        mqttMessage = new MqttPublishPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.PUBLISH.getCode()) {
+                        mqttPacket = new MqttPublishPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBACK.getCode()) {
-                        mqttMessage = new MqttPubackPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.PUBACK.getCode()) {
+                        mqttPacket = new MqttPubackPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBREC.getCode()) {
-                        mqttMessage = new MqttPubrecPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.PUBREC.getCode()) {
+                        mqttPacket = new MqttPubrecPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBREL.getCode()) {
-                        mqttMessage = new MqttPubrelPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.PUBREL.getCode()) {
+                        mqttPacket = new MqttPubrelPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PUBCOMP.getCode()) {
-                        mqttMessage = new MqttPubcompPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.PUBCOMP.getCode()) {
+                        mqttPacket = new MqttPubcompPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.SUBACK.getCode()) {
-                        mqttMessage = new MqttSubackPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.SUBACK.getCode()) {
+                        mqttPacket = new MqttSubackPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.UNSUBACK.getCode()) {
-                        mqttMessage = new MqttUnsubackPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.UNSUBACK.getCode()) {
+                        mqttPacket = new MqttUnsubackPacket();
                     }
-                    else if(((temp[0] & 0xff) >> 4) == MqttPacketType.PINGRESP.getCode()) {
-                        mqttMessage = new MqttPingrespPacket();
+                    else if(((temp[0] & 0xff) >>> 4) == MqttPacketType.PINGRESP.getCode()) {
+                        mqttPacket = new MqttPingrespPacket();
                     }
                     else {
                         continue;
@@ -89,9 +86,37 @@ public class MqttReceiver implements Runnable {
                     byte[] residue = new byte[size];
                     in.read(residue);
                     byte[] data = MqttBuildUtils.combineBytes(fixedHeader,residue);
-                    mqttMessage.setPacket(data);
-                    synchronized (packetListLock) {
-                        packetList.add(mqttMessage);
+                    mqttPacket.setPacket(data);
+                    try {
+                        if(mqttPacket instanceof MqttConnackPacket) {
+                            mqttPacketQueue.connack.put((MqttConnackPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttPublishPacket) {
+                            mqttPacketQueue.publish.put((MqttPublishPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttPubackPacket) {
+                            mqttPacketQueue.puback.put((MqttPubackPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttPubrecPacket) {
+                            mqttPacketQueue.pubrec.put((MqttPubrecPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttPubrelPacket) {
+                            mqttPacketQueue.pubrel.put((MqttPubrelPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttPubcompPacket) {
+                            mqttPacketQueue.pubcomp.put((MqttPubcompPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttSubackPacket) {
+                            mqttPacketQueue.suback.put((MqttSubackPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttUnsubackPacket) {
+                            mqttPacketQueue.unsuback.put((MqttUnsubackPacket) mqttPacket);
+                        }
+                        else if(mqttPacket instanceof MqttPingrespPacket) {
+                            mqttPacketQueue.pingresp.put((MqttPingrespPacket) mqttPacket);
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
                     }
                 }
             } catch (IOException e) {
