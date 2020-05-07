@@ -6,7 +6,6 @@ import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.mqtt.client.callback.*;
 import com.dreamgyf.mqtt.packet.MqttConnackPacket;
-import com.dreamgyf.mqtt.packet.MqttPacket;
 import com.dreamgyf.mqtt.packet.MqttSubackPacket;
 import com.dreamgyf.mqtt.packet.MqttUnsubackPacket;
 import com.dreamgyf.utils.ByteUtils;
@@ -448,7 +447,7 @@ public class MqttClient {
         this.port = port;
     }
 
-    private ExecutorService executorService = Executors.newFixedThreadPool(10);
+    private ExecutorService coreExecutorService = Executors.newFixedThreadPool(20);
 
     private final Object socketLock = new Object();
 
@@ -462,11 +461,11 @@ public class MqttClient {
 
     private volatile MqttPacketQueue mqttPacketQueue = new MqttPacketQueue();
 
+    private final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue = new LinkedBlockingQueue<>();
+
     private Set<Short> packetIdSet = new HashSet<>();
 
     private LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue = new LinkedBlockingQueue<>();
-
-    private LinkedBlockingQueue<MqttPubrelPacketBuilder> pubrelQueue = new LinkedBlockingQueue<>();
 
     private Set<Short> subscribePacketIdSet = new HashSet<>();
 
@@ -477,6 +476,8 @@ public class MqttClient {
     private MqttMessageHandler messageHandler;
 
     private MqttMessageQueueManger messageQueueManger;
+
+    private MqttCallbackQueueManger callbackQueueManger;
 
     private MqttMessageCallback messageCallback;
 
@@ -547,7 +548,6 @@ public class MqttClient {
         mqttPacketQueue = new MqttPacketQueue();
         if(cleanSession) {
             publishQueue.clear();
-            pubrelQueue.clear();
         }
 
         socket = new Socket(broker,port);
@@ -557,27 +557,30 @@ public class MqttClient {
 
         //创建报文接收器
         receiver = new MqttReceiver(socket,mqttPacketQueue);
-        executorService.execute(receiver);
+        coreExecutorService.execute(receiver);
         
         //创建心跳线程
-        mqttPing = new MqttPing(socket, socketLock, mqttPacketQueue.pingresp, keepAliveTime, new MqttConnectStateCallback(){
+        mqttPing = new MqttPing(coreExecutorService, socket, socketLock, mqttPacketQueue.pingresp, keepAliveTime, new MqttConnectStateCallback(){
             @Override
             public void onDisconnected() {
                 isConnected = false;
             }
         });
-        executorService.execute(mqttPing);
+        coreExecutorService.execute(mqttPing);
 
         ConnackListener connackListener = new ConnackListener(callback);
-        executorService.execute(connackListener);
+        coreExecutorService.execute(connackListener);
 
         //创建消息处理器
-        messageHandler = new MqttMessageHandler(socket, socketLock,mqttPacketQueue.publish,mqttPacketQueue.pubrel, messageCallback);
+        messageHandler = new MqttMessageHandler(coreExecutorService, socket, socketLock,mqttPacketQueue.publish,mqttPacketQueue.pubrel, callbackQueue, messageCallback);
         messageHandler.run();
 
         //创建消息队列管理器
-        messageQueueManger = new MqttMessageQueueManger(socket, socketLock,mqttPacketQueue.puback,mqttPacketQueue.pubrec,mqttPacketQueue.pubcomp, mqttPing, publishQueue);
+        messageQueueManger = new MqttMessageQueueManger(coreExecutorService, socket, socketLock,mqttPacketQueue.puback,mqttPacketQueue.pubrec,mqttPacketQueue.pubcomp, callbackQueue, mqttPing, publishQueue);
         messageQueueManger.run();
+
+        callbackQueueManger = new MqttCallbackQueueManger(callbackQueue);
+        coreExecutorService.execute(callbackQueueManger);
     }
 
     public boolean isConnected() {
@@ -710,7 +713,7 @@ public class MqttClient {
         }
         
         SubackListener subackListener = new SubackListener(variableHeader, topics, callback);
-        executorService.execute(subackListener);
+        coreExecutorService.execute(subackListener);
 
     }
 
@@ -747,13 +750,12 @@ public class MqttClient {
                         byte[] returnCodeList = subackPacket.getReturnCodeList();
                         isSubacked = true;
                         if(callback != null) {
-                            ExecutorService subackExecutor = Executors.newFixedThreadPool(10);
                             Iterator<MqttTopic> topicIterator = topics.iterator();
                             int pos = 0;
                             while(topicIterator.hasNext()) {
                                 final int i = pos;
                                 final MqttTopic topic = topicIterator.next();
-                                subackExecutor.execute(new Runnable(){
+                                coreExecutorService.execute(new Runnable(){
                                     @Override
                                     public void run() {
                                         if(returnCodeList[i] == 0x80) {
@@ -826,7 +828,7 @@ public class MqttClient {
         }
         
         UnsubackListener unsubackListener = new UnsubackListener(variableHeader, topics, callback);
-        executorService.execute(unsubackListener);
+        coreExecutorService.execute(unsubackListener);
 
     }
 
@@ -871,6 +873,7 @@ public class MqttClient {
         byte[] packet = new byte[2];
         packet[0] = MqttPacketType.DISCONNECT.getCode();
         packet[0] <<= 4;
+        callbackQueueManger.stop();
         messageQueueManger.stop();
         receiver.stop();
         mqttPing.stop();

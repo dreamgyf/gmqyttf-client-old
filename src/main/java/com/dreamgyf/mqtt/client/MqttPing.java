@@ -3,18 +3,17 @@ package com.dreamgyf.mqtt.client;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.util.Iterator;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.client.callback.MqttConnectStateCallback;
-import com.dreamgyf.mqtt.packet.MqttPacket;
 import com.dreamgyf.mqtt.packet.MqttPingrespPacket;
 
 class MqttPing implements Runnable {
+
+    private final ExecutorService coreExecutorService;
 
     private final Socket socket;
 
@@ -30,11 +29,12 @@ class MqttPing implements Runnable {
 
     private boolean isRunning;
 
-    private ExecutorService executorService = Executors.newFixedThreadPool(10);
 
-    protected MqttPing(final Socket socket, final Object socketLock,
+    protected MqttPing(final ExecutorService coreExecutorService,
+                       final Socket socket, final Object socketLock,
                        final LinkedBlockingQueue<MqttPingrespPacket> pingrespQueue,
                        int keepAliveTime, MqttConnectStateCallback callback) {
+        this.coreExecutorService = coreExecutorService;
         this.socket = socket;
         this.socketLock = socketLock;
         this.pingrespQueue = pingrespQueue;
@@ -62,7 +62,7 @@ class MqttPing implements Runnable {
                             updateLastReqTime();
                             //等待心跳响应
                             PingRespListener pingRespListener = new PingRespListener(System.currentTimeMillis());
-                            executorService.execute(pingRespListener);
+                            coreExecutorService.execute(pingRespListener);
                         } catch (IOException e) {
                             e.printStackTrace();
                             isRunning = false;
@@ -106,16 +106,6 @@ class MqttPing implements Runnable {
                     if(pingrespQueue.poll() != null) {
                         isResponsed = true;
                     }
-//                    synchronized (packetListLock) {
-//                        Iterator<MqttPacket> iterator = packetList.iterator();
-//                        while(iterator.hasNext()){
-//                            MqttPacket mqttMessage = iterator.next();
-//                            if(mqttMessage instanceof MqttPingrespPacket) {
-//                                iterator.remove();
-//                                isResponsed = true;
-//                            }
-//                        }
-//                    }
                 }
                 if(isTimeOut) {
                     isRunning = false;

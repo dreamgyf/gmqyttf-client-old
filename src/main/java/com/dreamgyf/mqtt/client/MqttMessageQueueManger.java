@@ -2,7 +2,6 @@ package com.dreamgyf.mqtt.client;
 
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
-import com.dreamgyf.mqtt.packet.MqttPacket;
 import com.dreamgyf.mqtt.packet.MqttPubackPacket;
 import com.dreamgyf.mqtt.packet.MqttPubcompPacket;
 import com.dreamgyf.mqtt.packet.MqttPubrecPacket;
@@ -20,7 +19,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 class MqttMessageQueueManger {
 
-    private ExecutorService executorService = Executors.newFixedThreadPool(10);
+    private final ExecutorService coreExecutorService;
 
     private final Socket socket;
 
@@ -31,6 +30,8 @@ class MqttMessageQueueManger {
     private final LinkedBlockingQueue<MqttPubrecPacket> pubrecQueue;
 
     private final LinkedBlockingQueue<MqttPubcompPacket> pubcompQueue;
+
+    private final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue;
 
     private final Set<Short> packetIdSet = new HashSet<>();
 
@@ -52,17 +53,21 @@ class MqttMessageQueueManger {
 
     private final MqttPubcompQueueManger pubcompQueueManger = new MqttPubcompQueueManger();
 
-    protected MqttMessageQueueManger(final Socket socket, final Object socketLock,
+    protected MqttMessageQueueManger(final ExecutorService coreExecutorService,
+                                     final Socket socket, final Object socketLock,
                                      final LinkedBlockingQueue<MqttPubackPacket> pubackQueue,
                                      final LinkedBlockingQueue<MqttPubrecPacket> pubrecQueue,
                                      final LinkedBlockingQueue<MqttPubcompPacket> pubcompQueue,
+                                     final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue,
                                      final MqttPing mqttPing,
                                      final LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue) {
+        this.coreExecutorService = coreExecutorService;
         this.socket = socket;
         this.socketLock = socketLock;
         this.pubackQueue = pubackQueue;
         this.pubrecQueue = pubrecQueue;
         this.pubcompQueue = pubcompQueue;
+        this.callbackQueue = callbackQueue;
         this.mqttPing = mqttPing;
         this.publishQueue = publishQueue;
     }
@@ -97,7 +102,11 @@ class MqttMessageQueueManger {
                     }
                     if(options.getQoS() == 0) {
                         if(callback != null) {
-                            callback.messageArrived(topic, message);
+                            MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                            callbackEntity.put("topic",topic);
+                            callbackEntity.put("message",message);
+                            callbackQueue.put(callbackEntity);
+//                            callback.messageArrived(topic, message);
                         }
                     }
                     else if(options.getQoS() == 1) {
@@ -131,8 +140,13 @@ class MqttMessageQueueManger {
                     String topic = publishPacketBuilder.getTopic();
                     String message = publishPacketBuilder.getMessage();
                     MqttPublishCallback callback = publishPacketBuilder.getCallback();
-                    if(callback != null)
-                        callback.messageArrived(topic, message);
+                    if(callback != null) {
+                        MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                        callbackEntity.put("topic",topic);
+                        callbackEntity.put("message",message);
+                        callbackQueue.put(callbackEntity);
+//                        callback.messageArrived(topic, message);
+                    }
                     waitPublishCompleteMap.remove(packetIdShort);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
@@ -193,8 +207,13 @@ class MqttMessageQueueManger {
                     String topic = publishPacketBuilder.getTopic();
                     String message = publishPacketBuilder.getMessage();
                     MqttPublishCallback callback = publishPacketBuilder.getCallback();
-                    if(callback != null)
-                        callback.messageArrived(topic, message);
+                    if(callback != null) {
+                        MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                        callbackEntity.put("topic",topic);
+                        callbackEntity.put("message",message);
+                        callbackQueue.put(callbackEntity);
+//                        callback.messageArrived(topic, message);
+                    }
                     waitPublishCompleteMap.remove(packetIdShort);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
@@ -206,16 +225,14 @@ class MqttMessageQueueManger {
     public void run() {
         if(!isRunning) {
             isRunning = true;
-            executorService = Executors.newFixedThreadPool(10);
-            executorService.execute(publishQueueManger);
-            executorService.execute(pubackQueueManger);
-            executorService.execute(pubrecQueueManger);
-            executorService.execute(pubcompQueueManger);
+            coreExecutorService.execute(publishQueueManger);
+            coreExecutorService.execute(pubackQueueManger);
+            coreExecutorService.execute(pubrecQueueManger);
+            coreExecutorService.execute(pubcompQueueManger);
         }
     }
 
     public void stop() {
         this.isRunning = false;
-        executorService.shutdownNow();
     }
 }

@@ -17,7 +17,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 class MqttMessageHandler {
     
-    private ExecutorService executorService = Executors.newFixedThreadPool(10);
+    private final ExecutorService coreExecutorService;
 
     private final Socket socket;
 
@@ -26,6 +26,8 @@ class MqttMessageHandler {
     private final LinkedBlockingQueue<MqttPublishPacket> publishQueue;
 
     private final LinkedBlockingQueue<MqttPubrelPacket> pubrelQueue;
+
+    private final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue;
 
     private MqttMessageCallback callback;
 
@@ -39,15 +41,17 @@ class MqttMessageHandler {
 
     private final MqttPubrelMessageHandler mqttPubrelMessageHandler = new MqttPubrelMessageHandler();
 
-    private final Object callbackLock = new Object();
-
-    public MqttMessageHandler(final Socket socket, final Object socketLock,
+    public MqttMessageHandler(final ExecutorService coreExecutorService,
+                              final Socket socket, final Object socketLock,
                               final LinkedBlockingQueue<MqttPublishPacket> publishQueue,
-                              final LinkedBlockingQueue<MqttPubrelPacket> pubrelQueue, MqttMessageCallback callback) {
+                              final LinkedBlockingQueue<MqttPubrelPacket> pubrelQueue,
+                              final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue, MqttMessageCallback callback) {
+        this.coreExecutorService = coreExecutorService;
         this.socket = socket;
         this.socketLock = socketLock;
         this.publishQueue = publishQueue;
         this.pubrelQueue = pubrelQueue;
+        this.callbackQueue = callbackQueue;
         this.callback = callback;
     }
 
@@ -64,7 +68,11 @@ class MqttMessageHandler {
                     String message = publishPacket.getMessage();
                     if(publishPacket.getQoS() == 0) {
                         if(callback != null) {
-                            callback.messageArrived(topic, message);
+                            MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                            callbackEntity.put("topic",topic);
+                            callbackEntity.put("message",message);
+                            callbackQueue.put(callbackEntity);
+//                            callback.messageArrived(topic, message);
                         }
                     }
                     else if(publishPacket.getQoS() == 1) {
@@ -91,7 +99,11 @@ class MqttMessageHandler {
                                 }
                                 packetIdSet.remove(packageIdShort);
                                 if(callback != null) {
-                                    callback.messageArrived(topic, message);
+                                    MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                                    callbackEntity.put("topic",topic);
+                                    callbackEntity.put("message",message);
+                                    callbackQueue.put(callbackEntity);
+//                                    callback.messageArrived(topic, message);
                                 }
                             }
                         }
@@ -123,7 +135,11 @@ class MqttMessageHandler {
                                 packetIdSet.remove(packageIdShort);packetIdSet.remove(packageIdShort);
                             }
                             if(callback != null) {
-                                callback.messageArrived(topic, message);
+                                MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                                callbackEntity.put("topic",topic);
+                                callbackEntity.put("message",message);
+                                callbackQueue.put(callbackEntity);
+//                                callback.messageArrived(topic, message);
                             }
                         }
 
@@ -179,9 +195,8 @@ class MqttMessageHandler {
     protected void run() {
         if(!isRunning) {
             isRunning = true;
-            executorService = Executors.newFixedThreadPool(10);
-            executorService.execute(mqttPublishMessageHandler);
-            executorService.execute(mqttPubrelMessageHandler);
+            coreExecutorService.execute(mqttPublishMessageHandler);
+            coreExecutorService.execute(mqttPubrelMessageHandler);
         }
     }
 

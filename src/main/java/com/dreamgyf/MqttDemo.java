@@ -11,6 +11,9 @@ import com.dreamgyf.mqtt.client.callback.MqttPublishCallback;
 import com.dreamgyf.mqtt.client.callback.MqttSubscribeCallback;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 public class MqttDemo {
 
