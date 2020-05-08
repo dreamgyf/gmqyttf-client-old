@@ -33,9 +33,7 @@ class MqttMessageQueueManger {
 
     private final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue;
 
-    private final Set<Short> packetIdSet = new HashSet<>();
-
-    private final Object packetIdSetLock = new Object();
+    private final Set<Short> packetIdSet;
 
     private final MqttPing mqttPing;
 
@@ -59,7 +57,7 @@ class MqttMessageQueueManger {
                                      final LinkedBlockingQueue<MqttPubrecPacket> pubrecQueue,
                                      final LinkedBlockingQueue<MqttPubcompPacket> pubcompQueue,
                                      final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue,
-                                     final MqttPing mqttPing,
+                                     final Set<Short> packetIdSet, final MqttPing mqttPing,
                                      final LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue) {
         this.coreExecutorService = coreExecutorService;
         this.socket = socket;
@@ -68,6 +66,7 @@ class MqttMessageQueueManger {
         this.pubrecQueue = pubrecQueue;
         this.pubcompQueue = pubcompQueue;
         this.callbackQueue = callbackQueue;
+        this.packetIdSet = packetIdSet;
         this.mqttPing = mqttPing;
         this.publishQueue = publishQueue;
     }
@@ -106,7 +105,6 @@ class MqttMessageQueueManger {
                             callbackEntity.put("topic",topic);
                             callbackEntity.put("message",message);
                             callbackQueue.put(callbackEntity);
-//                            callback.messageArrived(topic, message);
                         }
                     }
                     else if(options.getQoS() == 1) {
@@ -133,9 +131,7 @@ class MqttMessageQueueManger {
                     MqttPubackPacket pubackPacket = pubackQueue.take();
                     byte[] packetId = pubackPacket.getPacketId();
                     Short packetIdShort = ByteUtils.byte2ToShort(packetId);
-                    synchronized (packetIdSetLock) {
-                        packetIdSet.remove(packetIdShort);
-                    }
+                    packetIdSet.remove(packetIdShort);
                     MqttPublishPacketBuilder publishPacketBuilder = waitPublishCompleteMap.get(packetIdShort);
                     String topic = publishPacketBuilder.getTopic();
                     String message = publishPacketBuilder.getMessage();
@@ -145,7 +141,6 @@ class MqttMessageQueueManger {
                         callbackEntity.put("topic",topic);
                         callbackEntity.put("message",message);
                         callbackQueue.put(callbackEntity);
-//                        callback.messageArrived(topic, message);
                     }
                     waitPublishCompleteMap.remove(packetIdShort);
                 } catch (InterruptedException e) {
@@ -200,9 +195,7 @@ class MqttMessageQueueManger {
                     MqttPubcompPacket pubcompPacket = pubcompQueue.take();
                     byte[] packetId = pubcompPacket.getPacketId();
                     Short packetIdShort = ByteUtils.byte2ToShort(packetId);
-                    synchronized (packetIdSetLock) {
-                        packetIdSet.remove(packetIdShort);
-                    }
+                    packetIdSet.remove(packetIdShort);
                     MqttPublishPacketBuilder publishPacketBuilder = waitPublishCompleteMap.get(packetIdShort);
                     String topic = publishPacketBuilder.getTopic();
                     String message = publishPacketBuilder.getMessage();
@@ -212,7 +205,6 @@ class MqttMessageQueueManger {
                         callbackEntity.put("topic",topic);
                         callbackEntity.put("message",message);
                         callbackQueue.put(callbackEntity);
-//                        callback.messageArrived(topic, message);
                     }
                     waitPublishCompleteMap.remove(packetIdShort);
                 } catch (InterruptedException e) {

@@ -40,4 +40,16 @@ class MqttPacketQueue {
         pingresp = new LinkedBlockingQueue<>(capacity);
     }
 
+    protected void clear() {
+        connack.clear();
+        publish.clear();
+        puback.clear();
+        pubrec.clear();
+        pubrel.clear();
+        pubcomp.clear();
+        suback.clear();
+        unsuback.clear();
+        pingresp.clear();
+    }
+
 }
