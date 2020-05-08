@@ -33,9 +33,7 @@ class MqttMessageHandler {
 
     private boolean isRunning = false;
 
-    private Set<Short> packetIdSet = new HashSet<>();
-
-    private final Object packetIdSetLock = new Object();
+    private final Set<Short> packetIdSet;
 
     private final MqttPublishMessageHandler mqttPublishMessageHandler = new MqttPublishMessageHandler();
 
@@ -45,12 +43,14 @@ class MqttMessageHandler {
                               final Socket socket, final Object socketLock,
                               final LinkedBlockingQueue<MqttPublishPacket> publishQueue,
                               final LinkedBlockingQueue<MqttPubrelPacket> pubrelQueue,
+                              final Set<Short> packetIdSet,
                               final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue, MqttMessageCallback callback) {
         this.coreExecutorService = coreExecutorService;
         this.socket = socket;
         this.socketLock = socketLock;
         this.publishQueue = publishQueue;
         this.pubrelQueue = pubrelQueue;
+        this.packetIdSet = packetIdSet;
         this.callbackQueue = callbackQueue;
         this.callback = callback;
     }
@@ -72,49 +72,39 @@ class MqttMessageHandler {
                             callbackEntity.put("topic",topic);
                             callbackEntity.put("message",message);
                             callbackQueue.put(callbackEntity);
-//                            callback.messageArrived(topic, message);
                         }
                     }
                     else if(publishPacket.getQoS() == 1) {
                         byte[] packetId = publishPacket.getPacketId();
-                        short packageIdShort = ByteUtils.byte2ToShort(packetId);
-                        synchronized (packetIdSetLock) {
-                            if(!packetIdSet.contains(packageIdShort)) {
-                                packetIdSet.add(packageIdShort);
-                                byte[] fixedHeader = new byte[2];
-                                fixedHeader[0] = MqttPacketType.PUBACK.getCode();
-                                fixedHeader[0] <<= 4;
-                                fixedHeader[1] = 0b00000010;
-                                byte[] variableHeader = packetId;
-                                byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader);
-                                synchronized (socketLock) {
-                                    if(socket.isConnected()) {
-                                        try {
-                                            OutputStream os = socket.getOutputStream();
-                                            os.write(packet);
-                                        } catch (IOException e) {
-                                            e.printStackTrace();
-                                        }
-                                    }
-                                }
-                                packetIdSet.remove(packageIdShort);
-                                if(callback != null) {
-                                    MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
-                                    callbackEntity.put("topic",topic);
-                                    callbackEntity.put("message",message);
-                                    callbackQueue.put(callbackEntity);
-//                                    callback.messageArrived(topic, message);
+                        byte[] fixedHeader = new byte[2];
+                        fixedHeader[0] = MqttPacketType.PUBACK.getCode();
+                        fixedHeader[0] <<= 4;
+                        fixedHeader[1] = 0b00000010;
+                        byte[] variableHeader = packetId;
+                        byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader);
+                        synchronized (socketLock) {
+                            if(socket.isConnected()) {
+                                try {
+                                    OutputStream os = socket.getOutputStream();
+                                    os.write(packet);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
                                 }
                             }
+                        }
+                        if(callback != null) {
+                            MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
+                            callbackEntity.put("topic",topic);
+                            callbackEntity.put("message",message);
+                            callbackQueue.put(callbackEntity);
                         }
                     }
                     else if(publishPacket.getQoS() == 2) {
                         byte[] packetId = publishPacket.getPacketId();
                         short packageIdShort = ByteUtils.byte2ToShort(packetId);
+                        //这里不关心是否是来自服务端的重发消息
                         if(!packetIdSet.contains(packageIdShort)) {
-                            synchronized (packetIdSetLock) {
-                                packetIdSet.add(packageIdShort);
-                            }
+                            packetIdSet.add(packageIdShort);
                             byte[] fixedHeader = new byte[2];
                             fixedHeader[0] = MqttPacketType.PUBREC.getCode();
                             fixedHeader[0] <<= 4;
@@ -131,15 +121,11 @@ class MqttMessageHandler {
                                     }
                                 }
                             }
-                            synchronized (packetIdSetLock) {
-                                packetIdSet.remove(packageIdShort);packetIdSet.remove(packageIdShort);
-                            }
                             if(callback != null) {
                                 MqttCallbackEntity callbackEntity = new MqttCallbackEntity(callback,0);
                                 callbackEntity.put("topic",topic);
                                 callbackEntity.put("message",message);
                                 callbackQueue.put(callbackEntity);
-//                                callback.messageArrived(topic, message);
                             }
                         }
 
@@ -168,6 +154,7 @@ class MqttMessageHandler {
                     fixedHeader[1] = 0b00000010;
                     byte[] variableHeader = packetId;
                     byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader);
+                    packetIdSet.remove(ByteUtils.byte2ToShort(packetId));
                     synchronized (socketLock) {
                         if(socket.isConnected()) {
                             try {
@@ -177,9 +164,6 @@ class MqttMessageHandler {
                                 e.printStackTrace();
                             }
                         }
-                    }
-                    synchronized (packetIdSetLock) {
-                        packetIdSet.remove(ByteUtils.byte2ToShort(packetId));
                     }
                 } catch (InterruptedException e) {
                     e.printStackTrace();

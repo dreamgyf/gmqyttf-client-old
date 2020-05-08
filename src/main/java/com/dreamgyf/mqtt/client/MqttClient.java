@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -447,39 +448,73 @@ public class MqttClient {
         this.port = port;
     }
 
-    private ExecutorService coreExecutorService = Executors.newFixedThreadPool(20);
+    /**
+     * MQTT报文处理核心线程池
+     */
+    private ExecutorService coreExecutorService = Executors.newFixedThreadPool(30);
 
     private final Object socketLock = new Object();
-
-    private final Object packetIdSetLock = new Object();
-
-    private final Object subscribePacketIdSetLock = new Object();
 
     private volatile Socket socket;
 
     private volatile boolean isConnected = false;
-
-    private volatile MqttPacketQueue mqttPacketQueue = new MqttPacketQueue();
-
+    /**
+     * MQTT数据包接收队列
+     */
+    private final MqttPacketQueue mqttPacketQueue = new MqttPacketQueue();
+    /**
+     * MQTT消息回调队列
+     */
     private final LinkedBlockingQueue<MqttCallbackEntity> callbackQueue = new LinkedBlockingQueue<>();
-
-    private Set<Short> packetIdSet = new HashSet<>();
-
-    private LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue = new LinkedBlockingQueue<>();
-
-    private Set<Short> subscribePacketIdSet = new HashSet<>();
-
+    /**
+     * 客户端Packet Id集合
+     */
+    private final Set<Short> clientPacketIdSet = ConcurrentHashMap.newKeySet();
+    /**
+     * 服务端Packet Id集合
+     */
+    private final Set<Short> serverPacketIdSet = ConcurrentHashMap.newKeySet();
+    /**
+     * MQTT发送publish队列
+     */
+    private final LinkedBlockingQueue<MqttPublishPacketBuilder> publishQueue = new LinkedBlockingQueue<>();
+    /**
+     * MQTT数据包接收器
+     */
     private MqttReceiver receiver;
-
+    /**
+     * MQTT心跳
+     */
     private MqttPing mqttPing;
-
+    /**
+     * MQTT消息接收处理器
+     */
     private MqttMessageHandler messageHandler;
-
+    /**
+     * MQTT消息发送队列管理器
+     */
     private MqttMessageQueueManger messageQueueManger;
-
+    /**
+     * MQTT消息回调队列管理器
+     */
     private MqttCallbackQueueManger callbackQueueManger;
-
+    /**
+     * MQTT接收到消息后的回调接口
+     */
     private MqttMessageCallback messageCallback;
+
+    /**
+     * 清空连接所有状态
+     */
+    private void clean() {
+        if(cleanSession) {
+            mqttPacketQueue.clear();
+            publishQueue.clear();
+            clientPacketIdSet.clear();
+            serverPacketIdSet.clear();
+            callbackQueue.clear();
+        }
+    }
 
     public void connect() throws IOException, MqttException {
         connect(null);
@@ -488,6 +523,8 @@ public class MqttClient {
     public void connect(MqttConnectCallback callback) throws IOException, MqttException {
         if(broker == null || broker.equals("") || port == 0)
             throw new MqttException("Need to set borker and port");
+        if(isConnected)
+            throw new MqttException("Already Connected!");
         //构建连接报文
         //构建可变报头 Variable header
         byte[] protocolName = version.getProtocolName();
@@ -544,16 +581,11 @@ public class MqttClient {
         //构建整个报文
         byte[] packet = MqttBuildUtils.combineBytes(fixedHeader,variableHeader,payLoad);
 
-        //清空消息
-        mqttPacketQueue = new MqttPacketQueue();
-        if(cleanSession) {
-            publishQueue.clear();
-        }
+        clean();
 
         socket = new Socket(broker,port);
         OutputStream os = socket.getOutputStream();
         os.write(packet);
-        isConnected = socket.isConnected();
 
         //创建报文接收器
         receiver = new MqttReceiver(socket,mqttPacketQueue);
@@ -564,6 +596,12 @@ public class MqttClient {
             @Override
             public void onDisconnected() {
                 isConnected = false;
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                stopService();
             }
         });
         coreExecutorService.execute(mqttPing);
@@ -571,12 +609,16 @@ public class MqttClient {
         ConnackListener connackListener = new ConnackListener(callback);
         coreExecutorService.execute(connackListener);
 
-        //创建消息处理器
-        messageHandler = new MqttMessageHandler(coreExecutorService, socket, socketLock,mqttPacketQueue.publish,mqttPacketQueue.pubrel, callbackQueue, messageCallback);
+        //创建消息接收处理器
+        messageHandler = new MqttMessageHandler(coreExecutorService, socket, socketLock,
+                mqttPacketQueue.publish,mqttPacketQueue.pubrel, serverPacketIdSet,
+                callbackQueue, messageCallback);
         messageHandler.run();
 
-        //创建消息队列管理器
-        messageQueueManger = new MqttMessageQueueManger(coreExecutorService, socket, socketLock,mqttPacketQueue.puback,mqttPacketQueue.pubrec,mqttPacketQueue.pubcomp, callbackQueue, mqttPing, publishQueue);
+        //创建消息发送队列管理器
+        messageQueueManger = new MqttMessageQueueManger(coreExecutorService, socket, socketLock,
+                mqttPacketQueue.puback,mqttPacketQueue.pubrec,mqttPacketQueue.pubcomp, callbackQueue,
+                clientPacketIdSet, mqttPing, publishQueue);
         messageQueueManger.run();
 
         callbackQueueManger = new MqttCallbackQueueManger(callbackQueue);
@@ -610,8 +652,10 @@ public class MqttClient {
                     e.printStackTrace();
                 }
                 if(isConnacked && callback != null) {
-                    if(isSucceed)
+                    if(isSucceed) {
+                        isConnected = true;
                         callback.onSuccess();
+                    }
                     else {
                         isConnected = false;
                         callback.onFailure();
@@ -638,13 +682,13 @@ public class MqttClient {
         byte[] packetId = new byte[0];
         if(options.getQoS() != 0) {
             short id;
-            synchronized (packetIdSetLock) {
+            synchronized (clientPacketIdSet) {
                 do {
                     id = (short) (new Random(System.currentTimeMillis()).nextInt(Short.MAX_VALUE - 1) + 1);
-                } while(packetIdSet.contains(id));
+                } while(clientPacketIdSet.contains(id));
                 packetId = ByteUtils.shortToByte2(id);
                 mqttPublishPacketBuilder = new MqttPublishPacketBuilder(packetId, topic, message, options, callback);
-                packetIdSet.add(id);
+                clientPacketIdSet.add(id);
             }
         }
         else
@@ -683,12 +727,12 @@ public class MqttClient {
         header[0] |= 0b00000010;
         short id;
         byte[] variableHeader;
-        synchronized (packetIdSetLock) {
+        synchronized (clientPacketIdSet) {
             do {
                 id = (short) (new Random(System.currentTimeMillis()).nextInt(Short.MAX_VALUE - 1) + 1);
-            } while(packetIdSet.contains(id));
+            } while(clientPacketIdSet.contains(id));
             variableHeader = ByteUtils.shortToByte2(id);
-            packetIdSet.add(id);
+            clientPacketIdSet.add(id);
         }
         byte[] payLoad = new byte[0];
         for(MqttTopic topic : topics) {
@@ -707,11 +751,6 @@ public class MqttClient {
             os.write(packet);
             mqttPing.updateLastReqTime();
         }
-        //放入订阅队列
-        synchronized (subscribePacketIdSetLock) {
-            subscribePacketIdSet.add(id);
-        }
-        
         SubackListener subackListener = new SubackListener(variableHeader, topics, callback);
         coreExecutorService.execute(subackListener);
 
@@ -741,12 +780,7 @@ public class MqttClient {
                     MqttSubackPacket subackPacket = mqttPacketQueue.suback.peek();
                     if(subackPacket != null && Arrays.equals(subackPacket.getPacketId(),id)) {
                         short shortId = ByteUtils.byte2ToShort(id);
-                        synchronized (subscribePacketIdSetLock) {
-                            subscribePacketIdSet.remove(shortId);
-                        }
-                        synchronized (packetIdSetLock) {
-                            packetIdSet.remove(shortId);
-                        }
+                        clientPacketIdSet.remove(shortId);
                         byte[] returnCodeList = subackPacket.getReturnCodeList();
                         isSubacked = true;
                         if(callback != null) {
@@ -802,12 +836,12 @@ public class MqttClient {
         header[0] |= 0b00000010;
         short id;
         byte[] variableHeader;
-        synchronized (packetIdSetLock) {
+        synchronized (clientPacketIdSet) {
             do {
                 id = (short) (new Random(System.currentTimeMillis()).nextInt(Short.MAX_VALUE - 1) + 1);
-            } while(packetIdSet.contains(id));
+            } while(clientPacketIdSet.contains(id));
             variableHeader = ByteUtils.shortToByte2(id);
-            packetIdSet.add(id);
+            clientPacketIdSet.add(id);
         }
         byte[] payLoad = new byte[0];
         for(MqttTopic topic : topics) {
@@ -856,9 +890,7 @@ public class MqttClient {
                     MqttUnsubackPacket unsubackPacket = mqttPacketQueue.unsuback.peek();
                     if(unsubackPacket != null && Arrays.equals(unsubackPacket.getPacketId(),id)) {
                         short shortId = ByteUtils.byte2ToShort(id);
-                        synchronized (packetIdSetLock) {
-                            packetIdSet.remove(shortId);
-                        }
+                        clientPacketIdSet.remove(shortId);
                         isUnsubacked = true;
                     }
                 }
@@ -873,14 +905,6 @@ public class MqttClient {
         byte[] packet = new byte[2];
         packet[0] = MqttPacketType.DISCONNECT.getCode();
         packet[0] <<= 4;
-        callbackQueueManger.stop();
-        messageQueueManger.stop();
-        receiver.stop();
-        mqttPing.stop();
-        mqttPing = null;
-        messageHandler.stop();
-        messageHandler = null;
-        isConnected = false;
         synchronized (socketLock) {
             if(socket.isConnected()) {
                 OutputStream os = socket.getOutputStream();
@@ -888,6 +912,22 @@ public class MqttClient {
                 socket.close();
             }
         }
+        isConnected = false;
+        stopService();
+    }
+
+    private void stopService() {
+        callbackQueueManger.stop();
+        callbackQueueManger = null;
+        messageQueueManger.stop();
+        messageQueueManger = null;
+        receiver.stop();
+        receiver = null;
+        mqttPing.stop();
+        mqttPing = null;
+        messageHandler.stop();
+        messageHandler = null;
+        System.gc();
     }
 
     public void setCallback(MqttMessageCallback callback) {
