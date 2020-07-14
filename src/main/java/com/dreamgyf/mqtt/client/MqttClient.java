@@ -1,7 +1,6 @@
 package com.dreamgyf.mqtt.client;
 
 import com.dreamgyf.exception.MqttException;
-import com.dreamgyf.exception.ValueRangeException;
 import com.dreamgyf.mqtt.MqttPacketType;
 import com.dreamgyf.mqtt.MqttVersion;
 import com.dreamgyf.mqtt.client.callback.*;
@@ -125,9 +124,9 @@ public class MqttClient {
             return this.willQoS;
         }
     
-        public Builder setWillQoS(int willQoS) throws ValueRangeException {
+        public Builder setWillQoS(int willQoS) {
             if(willQoS < 0 || willQoS > 2)
-                throw new ValueRangeException("The value of QoS must be between 0 and 2.");
+                throw new IllegalArgumentException("The value of QoS must be between 0 and 2.");
             this.willQoS = willQoS;
             return this;
         }
@@ -172,9 +171,9 @@ public class MqttClient {
             return this.clientId;
         }
     
-        public Builder setClientId(String clientId) throws ValueRangeException {
+        public Builder setClientId(String clientId) {
             if(!Pattern.matches("^[a-zA-Z0-9]+$",clientId))
-                throw new ValueRangeException("illegal character,Client ID can only contain letters and Numbers");
+                throw new IllegalArgumentException("illegal character,Client ID can only contain letters and Numbers");
             this.clientId = clientId;
             return this;
         }
@@ -332,9 +331,9 @@ public class MqttClient {
         return this.willQoS;
     }
 
-    public void setWillQoS(int willQoS) throws ValueRangeException {
+    public void setWillQoS(int willQoS) {
         if(willQoS < 0 || willQoS > 2)
-            throw new ValueRangeException("The value of QoS must be between 0 and 2.");
+            throw new IllegalArgumentException("The value of QoS must be between 0 and 2.");
         this.willQoS = willQoS;
     }
 
@@ -374,9 +373,9 @@ public class MqttClient {
         return this.clientId;
     }
 
-    public void setClientId(String clientId) throws ValueRangeException {
+    public void setClientId(String clientId) {
         if(!Pattern.matches("^[a-zA-Z0-9]+$",clientId))
-            throw new ValueRangeException("illegal character,Client ID can only contain letters and Numbers");
+            throw new IllegalArgumentException("illegal character,Client ID can only contain letters and Numbers");
         this.clientId = clientId;
     }
 

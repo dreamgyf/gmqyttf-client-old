@@ -1,7 +1,5 @@
 package com.dreamgyf.mqtt.client;
 
-import com.dreamgyf.exception.ValueRangeException;
-
 public class MqttPublishOptions {
 
     /**
@@ -33,9 +31,9 @@ public class MqttPublishOptions {
         return this.QoS;
     }
 
-    public MqttPublishOptions setQoS(int QoS) throws ValueRangeException {
+    public MqttPublishOptions setQoS(int QoS) {
         if(QoS < 0 || QoS > 2)
-            throw new ValueRangeException("The value of QoS must be between 0 and 2.");
+            throw new IllegalArgumentException("The value of QoS must be between 0 and 2.");
         this.QoS = (byte) QoS;
         return this;
     }
