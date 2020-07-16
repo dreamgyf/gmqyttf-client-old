@@ -28,7 +28,7 @@ class MqttCallbackQueueManger implements Runnable {
                     }
                 } else if(callback instanceof MqttPublishCallback) {
                     if(callbackEntity.getState() == 0) {
-                        ((MqttMessageCallback) callback).messageArrived((String) callbackEntity.get("topic"),(String) callbackEntity.get("message"));
+                        ((MqttPublishCallback) callback).messageArrived((String) callbackEntity.get("topic"),(String) callbackEntity.get("message"));
                     }
                 }
             } catch (InterruptedException e) {
