@@ -901,6 +901,8 @@ public class MqttClient {
     }
 
     public void disconnect() throws MqttException, IOException {
+        isConnected = false;
+        stopService();
         byte[] packet = new byte[2];
         packet[0] = MqttPacketType.DISCONNECT.getCode();
         packet[0] <<= 4;
@@ -911,8 +913,6 @@ public class MqttClient {
                 socket.close();
             }
         }
-        isConnected = false;
-        stopService();
     }
 
     private void stopService() {
